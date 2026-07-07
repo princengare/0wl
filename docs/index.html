@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>0wl</title>
+    <style>
+      :root {
+        color: #f7f7f7;
+        background: #000;
+        font-family:
+          SFMono-Regular, "Cascadia Code", "Liberation Mono", Menlo, Consolas, monospace;
+        font-size: 16px;
+        line-height: 1.45;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background: #000;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      a:hover,
+      a:focus {
+        text-decoration: underline;
+      }
+
+      .shell {
+        min-height: 100vh;
+        padding: clamp(1rem, 3vw, 3rem);
+      }
+
+      .frame {
+        width: min(100%, 980px);
+        margin: 0 auto;
+        border: 2px solid #f7f7f7;
+        background: #000;
+      }
+
+      .header,
+      .section,
+      .footer {
+        padding: clamp(1rem, 3vw, 2rem);
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        border-bottom: 2px solid #f7f7f7;
+      }
+
+      .section + .section,
+      .footer {
+        border-top: 2px solid #f7f7f7;
+      }
+
+      .brand,
+      h1,
+      h2,
+      p {
+        margin: 0;
+        font-weight: 400;
+      }
+
+      .brand {
+        font-size: clamp(1.25rem, 4vw, 2rem);
+      }
+
+      .muted {
+        color: #b8b8b8;
+      }
+
+      .hero {
+        display: grid;
+        gap: 1.5rem;
+      }
+
+      h1 {
+        max-width: 14ch;
+        font-size: clamp(2.2rem, 8vw, 5.5rem);
+        line-height: 1.02;
+      }
+
+      h2 {
+        margin-bottom: 1.25rem;
+        font-size: clamp(1.15rem, 3vw, 1.6rem);
+      }
+
+      .summary {
+        max-width: 62ch;
+      }
+
+      .terminal-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.6rem 2rem;
+        align-items: baseline;
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .card {
+        min-height: 9rem;
+        border: 1px solid #f7f7f7;
+        padding: 1rem;
+        display: grid;
+        align-content: space-between;
+        gap: 1rem;
+      }
+
+      .links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.25rem;
+      }
+
+      .button::before {
+        content: "[ ";
+      }
+
+      .button::after {
+        content: " ]";
+      }
+
+      .prompt {
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      code {
+        color: #f7f7f7;
+      }
+
+      @media (max-width: 760px) {
+        .header,
+        .terminal-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .header {
+          display: grid;
+        }
+
+        .cards {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="frame">
+        <header class="header">
+          <p class="brand">0wl</p>
+          <nav class="links" aria-label="Documentation">
+            <a class="button" href="firefox-installation.html">install</a>
+            <a class="button" href="development.html">develop</a>
+            <a class="button" href="release/process.html">release</a>
+          </nav>
+        </header>
+
+        <section class="section hero" aria-labelledby="title">
+          <h1 id="title">local-first website focus tracker</h1>
+          <p class="summary">
+            0wl is a standalone Firefox WebExtension for tracking active website time,
+            blocking distracting domains, and setting daily time limits. No accounts. No
+            backend. No cloud sync.
+          </p>
+        </section>
+
+        <section class="section" aria-labelledby="status-title">
+          <h2 id="status-title">Project status</h2>
+          <div class="terminal-grid">
+            <span>Firefox Manifest V3</span>
+            <span>ready</span>
+            <span>local IndexedDB history</span>
+            <span>ready</span>
+            <span>blocked sites</span>
+            <span>ready</span>
+            <span>time limits</span>
+            <span>ready</span>
+            <span>AMO release</span>
+            <span>next</span>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="docs-title">
+          <h2 id="docs-title">Docs</h2>
+          <div class="cards">
+            <a class="card" href="firefox-installation.html">
+              <span>install</span>
+              <span class="muted">Temporary development installs and signed persistent Firefox builds.</span>
+            </a>
+            <a class="card" href="development.html">
+              <span>development</span>
+              <span class="muted">One-command Firefox reload workflow with a dedicated local profile.</span>
+            </a>
+            <a class="card" href="data-migration.html">
+              <span>data migration</span>
+              <span class="muted">IndexedDB, settings repair, lifecycle metadata, and update safety.</span>
+            </a>
+            <a class="card" href="release/process.html">
+              <span>release process</span>
+              <span class="muted">Versioning, packaging, signing, and stable release checks.</span>
+            </a>
+            <a class="card" href="release/automatic-updates.html">
+              <span>automatic updates</span>
+              <span class="muted">AMO updates and self-hosted update manifest notes.</span>
+            </a>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="commands-title">
+          <h2 id="commands-title">Commands</h2>
+          <div class="prompt">
+            <code>npm install</code>
+            <code>npm run firefox:dev</code>
+            <code>npm run release:prepare</code>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <p class="muted">Open source, local-first, Firefox-first.</p>
+        </footer>
+      </div>
+    </main>
+  </body>
+</html>
