@@ -2,7 +2,7 @@
 
 0wl is a standalone, local-first Firefox WebExtension for tracking active website usage and blocking distracting sites.
 
-It does not use a backend, authentication, analytics, telemetry, cloud storage, external APIs, OpenAI APIs, localhost services, or any integration with another app.
+Project site: https://princengare.github.io/0wl/
 
 ## Open Source and Repository Safety
 
