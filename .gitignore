@@ -1,0 +1,44 @@
+node_modules/
+dist/
+web-ext-artifacts/
+coverage/
+.DS_Store
+*.log
+
+# Local environment and signing secrets
+.env
+.env.*
+!.env.example
+web-ext-config.js
+.web-ext-config.js
+*.pem
+*.key
+*.p12
+*.crt
+
+# Local Firefox/browser profiles and extension runtime data
+/profile/
+/profiles/
+/firefox-profile/
+/web-ext-profile/
+/.web-ext-profile/
+/IndexedDB/
+/browser-extension-data/
+/storage/
+/idb/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.ldb
+
+# Local exports may contain browsing history or blocked-site data
+/exports/
+/local-data/
+/user-data/
+*.csv
+*.tsv
+
+# Build/package scratch output
+.cache/
+.vite/
+*.xpi

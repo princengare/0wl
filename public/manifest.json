@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "0wl",
+  "version": "0.1.0",
+  "description": "Local-first website usage tracking and blocking for Firefox.",
+  "icons": {
+    "16": "icons/w0wltb-16.png",
+    "32": "icons/w0wltb-32.png",
+    "48": "icons/w0wltb-48.png",
+    "96": "icons/w0wltb-96.png",
+    "128": "icons/w0wltb-128.png"
+  },
+  "action": {
+    "default_title": "0wl",
+    "default_popup": "popup/index.html",
+    "default_icon": {
+      "16": "icons/w0wltb-16.png",
+      "32": "icons/w0wltb-32.png",
+      "48": "icons/w0wltb-48.png",
+      "96": "icons/w0wltb-96.png",
+      "128": "icons/w0wltb-128.png"
+    }
+  },
+  "background": {
+    "scripts": ["background/index.js"],
+    "type": "module"
+  },
+  "permissions": ["tabs", "storage", "idle", "alarms", "declarativeNetRequest"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "options_ui": {
+    "page": "dashboard/index.html",
+    "open_in_tab": true
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked/index.html", "limit/index.html"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "0wl@princengare.github.io",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}
