@@ -1,6 +1,6 @@
 {
   "name": "0wl",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -22,7 +22,7 @@
     "release:check": "node scripts/verify-release.mjs",
     "release:prepare": "node scripts/prepare-release.mjs",
     "updates:manifest": "node scripts/create-update-manifest.mjs",
-    "sign:firefox": "web-ext sign --source-dir dist --artifacts-dir web-ext-artifacts"
+    "sign:firefox": "node scripts/sign-firefox.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",

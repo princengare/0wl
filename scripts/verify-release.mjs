@@ -22,6 +22,7 @@ function assertDistPath(path, label) {
 
 const packageJsonPath = resolve(root, "package.json");
 const manifestPath = resolve(root, "dist", "manifest.json");
+const amoMetadataPath = resolve(root, "amo-metadata.json");
 
 assert(existsSync(packageJsonPath), "package.json is missing.");
 assert(existsSync(manifestPath), "dist/manifest.json is missing. Run npm run build first.");
@@ -75,6 +76,42 @@ if (failures.length === 0) {
 
   for (const requiredDoc of ["README.md", "LICENSE", "PRIVACY.md", "SECURITY.md"]) {
     assert(existsSync(resolve(root, requiredDoc)), `${requiredDoc} is required for release.`);
+  }
+
+  assert(existsSync(amoMetadataPath), "amo-metadata.json is required for AMO listed releases.");
+
+  if (existsSync(amoMetadataPath)) {
+    const amoMetadata = readJson(amoMetadataPath);
+    const firefoxCategories = amoMetadata.categories?.firefox;
+    const customLicense = amoMetadata.version?.custom_license;
+    const namedLicense = amoMetadata.version?.license;
+    const hasFirefoxCategories =
+      Array.isArray(firefoxCategories) &&
+      firefoxCategories.every((category) => typeof category === "string") &&
+      firefoxCategories.length > 0;
+    const hasLocalizedCustomLicense =
+      customLicense &&
+      typeof customLicense === "object" &&
+      !Array.isArray(customLicense) &&
+      customLicense.name &&
+      typeof customLicense.name === "object" &&
+      !Array.isArray(customLicense.name) &&
+      typeof customLicense.name["en-US"] === "string" &&
+      customLicense.name["en-US"].trim().length > 0 &&
+      customLicense.text &&
+      typeof customLicense.text === "object" &&
+      !Array.isArray(customLicense.text) &&
+      typeof customLicense.text["en-US"] === "string" &&
+      customLicense.text["en-US"].trim().length > 0;
+
+    assert(
+      hasFirefoxCategories,
+      "AMO metadata must define at least one Firefox category in categories.firefox."
+    );
+    assert(
+      typeof namedLicense === "string" || hasLocalizedCustomLicense,
+      "AMO metadata must define version.license or localized version.custom_license.name/text."
+    );
   }
 }
 

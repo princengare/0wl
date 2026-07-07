@@ -4,6 +4,11 @@ All notable changes to 0wl will be documented in this file.
 
 The project follows semantic versioning once public releases begin.
 
+## 0.1.1
+
+- Added AMO listed-release metadata for signing.
+- Bumped the release version after the deleted AMO 0.1.0 upload could not be reused.
+
 ## 0.1.0
 
 - Initial local-first Firefox usage tracker.
