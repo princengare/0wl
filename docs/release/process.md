@@ -9,6 +9,12 @@
 1.0.0  Stable public release
 ```
 
+Current public release:
+
+- Version: `0.1.2`
+- Status: approved and listed on Mozilla Add-ons
+- Listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
+
 ## Stable Release Checklist
 
 1. Update `package.json` and `public/manifest.json` to the same version.

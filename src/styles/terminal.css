@@ -260,6 +260,225 @@ select option {
   opacity: 1;
 }
 
+.terminal-rule {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.terminal-rule:last-child {
+  border-bottom: 0;
+}
+
+.terminal-rule-copy {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.terminal-edit-panel {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.terminal-edit-panel .terminal-schedule-editor {
+  margin-top: 0.5rem;
+}
+
+.terminal-schedule-editor {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  color: #f7f7f7;
+}
+
+.terminal-schedule-editor .terminal-actions {
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.terminal-day-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.terminal-day-button {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid #f7f7f7;
+  display: inline-grid;
+  place-items: center;
+}
+
+.terminal-day-button.active,
+.terminal-day-button:hover,
+.terminal-day-button:focus-visible {
+  color: #000000;
+  background: #f7f7f7;
+  outline: none;
+}
+
+.terminal-time-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 180px));
+  gap: 1rem;
+}
+
+.terminal-time-inputs label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.terminal-chart {
+  --chart-height: 220px;
+  position: relative;
+  margin: 1.25rem 0 2rem;
+}
+
+.terminal-chart-bars {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--bar-count), minmax(18px, 1fr));
+  gap: 0.35rem;
+  min-height: calc(var(--chart-height) + 3.5rem);
+  align-items: end;
+  padding-top: 0.5rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.terminal-chart-hourly .terminal-chart-bars {
+  min-height: calc(var(--chart-height) + 2rem);
+  padding-top: 2rem;
+}
+
+.terminal-chart-week .terminal-chart-bars {
+  gap: 0.131rem;
+}
+
+.terminal-chart-bar {
+  position: relative;
+  min-width: 0;
+  min-height: calc(var(--chart-height) + 3.1rem);
+  display: grid;
+  grid-template-rows: var(--chart-height) 3rem;
+  align-items: end;
+  justify-items: center;
+  padding: 0;
+}
+
+.terminal-chart-hourly .terminal-chart-bar {
+  min-height: var(--chart-height);
+  grid-template-rows: var(--chart-height);
+}
+
+.terminal-chart-bar:focus-visible {
+  outline: 1px solid #f7f7f7;
+  outline-offset: 0.25rem;
+}
+
+.terminal-chart-bar:disabled {
+  cursor: default;
+}
+
+.terminal-chart-bar-fill {
+  width: min(100%, 1.25rem);
+  height: var(--height);
+  align-self: end;
+  background: #f7f7f7;
+  border: 1px solid #f7f7f7;
+}
+
+.terminal-chart-week .terminal-chart-bar-fill {
+  width: min(100%, 2.344rem);
+}
+
+.terminal-chart-bar:disabled .terminal-chart-bar-fill {
+  height: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.terminal-chart-bar.selected .terminal-chart-bar-fill,
+.terminal-chart-bar:not(:disabled):hover .terminal-chart-bar-fill {
+  background: #000000;
+  outline: 2px solid #f7f7f7;
+}
+
+.terminal-chart-label {
+  display: block;
+  align-self: start;
+  max-width: 4rem;
+  margin-top: 0.5rem;
+  color: #b8b8b8;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.terminal-chart-bar.selected .terminal-chart-label {
+  color: #f7f7f7;
+}
+
+.terminal-chart-marker {
+  position: absolute;
+  left: var(--marker-left);
+  top: 0;
+  bottom: 0.25rem;
+  z-index: 1;
+  color: #8a8a8a;
+  font-size: 0.72rem;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.terminal-chart-marker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 1.45rem;
+  bottom: 0;
+  border-left: 1px dotted #8a8a8a;
+}
+
+.terminal-chart-marker span {
+  white-space: nowrap;
+}
+
+.terminal-average-line {
+  position: absolute;
+  left: 0;
+  right: 2.25rem;
+  bottom: calc(3.5rem + var(--average));
+  z-index: 1;
+  border-top: 1px dotted #8a8a8a;
+  pointer-events: none;
+}
+
+.terminal-average-label {
+  position: absolute;
+  right: 0;
+  bottom: calc(3.5rem + var(--average));
+  z-index: 1;
+  color: #8a8a8a;
+  font-size: 0.72rem;
+  line-height: 1;
+  transform: translateY(50%);
+}
+
+.terminal-selected-breakdown {
+  margin-top: 1rem;
+}
+
+.terminal-week-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 @media (max-width: 640px) {
   .terminal-popup {
     width: 340px;
@@ -279,5 +498,18 @@ select option {
 
   .terminal-grid {
     grid-template-columns: 1fr;
+  }
+
+  .terminal-time-inputs {
+    grid-template-columns: 1fr;
+  }
+
+  .terminal-chart {
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+
+  .terminal-chart-bars {
+    min-width: 680px;
   }
 }

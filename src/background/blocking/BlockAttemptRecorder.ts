@@ -13,15 +13,16 @@ export class BlockAttemptRecorder {
   ) {}
 
   async recordNavigationAttempt(input: string): Promise<BlockAttempt> {
+    const now = this.now();
     const domain = normalizeDomain(input);
-    const enabledBlockedDomains = await this.settingsStore.getEnabledBlockedDomains(this.now());
-    const blockedDomain = findEnabledBlockedDomain(domain, enabledBlockedDomains);
+    const enabledBlockedDomains = await this.settingsStore.getEnabledBlockedDomains(now);
+    const blockedDomain = findEnabledBlockedDomain(domain, enabledBlockedDomains, now);
 
     if (!blockedDomain) {
       throw new Error("Blocked attempt ignored because the domain is not currently blocked.");
     }
 
-    return this.blockAttemptRepository.recordNavigationAttempt(domain, this.now());
+    return this.blockAttemptRepository.recordNavigationAttempt(domain, now);
   }
 
   async countToday(input: string): Promise<number> {

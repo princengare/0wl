@@ -3,6 +3,7 @@ import type { ExtensionLifecycleManager } from "../lifecycle/ExtensionLifecycleM
 import type { TimeLimitManager } from "../timeLimits/TimeLimitManager";
 import type { TrackingEngine } from "./TrackingEngine";
 import type { SettingsStore } from "@/storage/SettingsStore";
+import { BLOCK_RULE_ALARM_NAME } from "@/shared/constants";
 import type { ReconcileReason } from "@/shared/types";
 
 interface TrackingEventHandlerDependencies {
@@ -66,7 +67,18 @@ export function registerTrackingEventHandlers({
   });
 
   browser.alarms.onAlarm.addListener((alarm) => {
-    runSafely(timeLimitManager.handleAlarm(alarm.name));
+    runSafely(
+      (async () => {
+        if (alarm.name === BLOCK_RULE_ALARM_NAME) {
+          const settings = await settingsStore.get();
+          await blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+          await timeLimitManager.refresh();
+          return;
+        }
+
+        await timeLimitManager.handleAlarm(alarm.name);
+      })()
+    );
   });
 
   browser.storage.onChanged.addListener((changes, areaName) => {
@@ -78,7 +90,7 @@ export function registerTrackingEventHandlers({
       (async () => {
         const settings = await settingsStore.get();
         browser.idle.setDetectionInterval(settings.idleThresholdSeconds);
-        await blockRuleManager.syncDynamicRules(settings.blockedDomains);
+        await blockRuleManager.refreshDynamicRules(settings.blockedDomains);
         await trackingEngine.reconcileTrackingState(
           settings.trackingEnabled ? "settings-changed" : "tracking-disabled"
         );

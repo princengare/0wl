@@ -28,4 +28,16 @@ export class SessionRepository {
     await transactionDone(transaction);
     return sessions.sort((a, b) => b.startedAt - a.startedAt);
   }
+
+  async getOverlapping(startInclusive: number, endExclusive: number): Promise<UsageSession[]> {
+    const db = await openDatabase();
+    const transaction = db.transaction(STORE_SESSIONS, "readonly");
+    const index = transaction.objectStore(STORE_SESSIONS).index(INDEX_STARTED_AT);
+    const range = IDBKeyRange.upperBound(endExclusive, true);
+    const sessions = await requestToPromise(index.getAll(range));
+    await transactionDone(transaction);
+    return sessions
+      .filter((session) => session.endedAt > startInclusive && session.startedAt < endExclusive)
+      .sort((a, b) => b.startedAt - a.startedAt);
+  }
 }

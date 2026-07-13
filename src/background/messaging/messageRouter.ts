@@ -114,11 +114,21 @@ async function getHistory(
   dependencies: MessageRouterDependencies
 ): Promise<HistorySessionView[]> {
   const now = dependencies.now?.() ?? Date.now();
-  const sessions = await dependencies.sessionRepository.getBetween(
-    rangeStart(range, now),
-    rangeEnd(range, now)
-  );
-  return sessions.map((session) => ({
+  return getHistoryInterval(rangeStart(range, now), rangeEnd(range, now), dependencies);
+}
+
+async function getHistoryInterval(
+  start: number,
+  end: number,
+  dependencies: MessageRouterDependencies
+): Promise<HistorySessionView[]> {
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return [];
+  }
+
+  const now = dependencies.now?.() ?? Date.now();
+  const sessions = await dependencies.sessionRepository.getOverlapping(start, end);
+  const rows = sessions.map((session) => ({
     id: session.id,
     domain: session.domain,
     startedAt: session.startedAt,
@@ -126,6 +136,31 @@ async function getHistory(
     durationMs: session.durationMs,
     dateKey: session.dateKey
   }));
+  const runtimeState = await dependencies.runtimeStateStore.get(now);
+
+  if (
+    runtimeState.status === "tracking" &&
+    runtimeState.domain &&
+    runtimeState.sessionStartedAt !== null &&
+    runtimeState.sessionStartedAt < end &&
+    now > start
+  ) {
+    const startedAt = Math.max(runtimeState.sessionStartedAt, start);
+    const endedAt = Math.min(now, end);
+
+    if (endedAt > startedAt) {
+      rows.unshift({
+        id: "runtime-current-session",
+        domain: runtimeState.domain,
+        startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        dateKey: getDateKey(startedAt)
+      });
+    }
+  }
+
+  return rows;
 }
 
 async function syncSettingsSideEffects(
@@ -133,7 +168,7 @@ async function syncSettingsSideEffects(
   dependencies: MessageRouterDependencies
 ): Promise<void> {
   browser.idle.setDetectionInterval(settings.idleThresholdSeconds);
-  await dependencies.blockRuleManager.syncDynamicRules(settings.blockedDomains);
+  await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
   await dependencies.trackingEngine.reconcileTrackingState(
     settings.trackingEnabled ? "settings-changed" : "tracking-disabled"
   );
@@ -150,6 +185,9 @@ async function routeMessage(
 
     case "GET_HISTORY":
       return ok(await getHistory(message.range, dependencies));
+
+    case "GET_HISTORY_INTERVAL":
+      return ok(await getHistoryInterval(message.startedAt, message.endedAt, dependencies));
 
     case "GET_SETTINGS":
       return ok(await dependencies.settingsStore.get(dependencies.now?.() ?? Date.now()));
@@ -170,10 +208,11 @@ async function routeMessage(
     case "ADD_BLOCKED_DOMAIN": {
       await dependencies.settingsStore.addBlockedDomain(
         message.input,
-        dependencies.now?.() ?? Date.now()
+        dependencies.now?.() ?? Date.now(),
+        message.schedule
       );
       const settings = await dependencies.settingsStore.get();
-      await dependencies.blockRuleManager.syncDynamicRules(settings.blockedDomains);
+      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
       return ok(settings);
     }
 
@@ -183,7 +222,7 @@ async function routeMessage(
         dependencies.now?.() ?? Date.now()
       );
       const settings = await dependencies.settingsStore.get();
-      await dependencies.blockRuleManager.syncDynamicRules(settings.blockedDomains);
+      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
       return ok(settings);
     }
 
@@ -194,7 +233,30 @@ async function routeMessage(
         dependencies.now?.() ?? Date.now()
       );
       const settings = await dependencies.settingsStore.get();
-      await dependencies.blockRuleManager.syncDynamicRules(settings.blockedDomains);
+      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+      return ok(settings);
+    }
+
+    case "UPDATE_BLOCKED_DOMAIN": {
+      await dependencies.settingsStore.updateBlockedDomain(
+        message.id,
+        message.input,
+        message.schedule,
+        dependencies.now?.() ?? Date.now()
+      );
+      const settings = await dependencies.settingsStore.get();
+      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+      return ok(settings);
+    }
+
+    case "UPDATE_BLOCKED_DOMAIN_SCHEDULE": {
+      await dependencies.settingsStore.updateBlockedDomainSchedule(
+        message.id,
+        message.schedule,
+        dependencies.now?.() ?? Date.now()
+      );
+      const settings = await dependencies.settingsStore.get();
+      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
       return ok(settings);
     }
 
@@ -202,7 +264,8 @@ async function routeMessage(
       await dependencies.settingsStore.addTimeLimitedDomain(
         message.input,
         message.limitMinutes,
-        dependencies.now?.() ?? Date.now()
+        dependencies.now?.() ?? Date.now(),
+        message.schedule
       );
       const settings = await dependencies.settingsStore.get();
       await dependencies.timeLimitManager.refresh();
@@ -234,7 +297,9 @@ async function routeMessage(
       await dependencies.settingsStore.updateTimeLimitedDomain(
         message.id,
         message.limitMinutes,
-        dependencies.now?.() ?? Date.now()
+        message.schedule,
+        dependencies.now?.() ?? Date.now(),
+        message.input
       );
       const settings = await dependencies.settingsStore.get();
       await dependencies.timeLimitManager.refresh();

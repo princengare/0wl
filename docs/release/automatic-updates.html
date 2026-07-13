@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>0wl automatic updates</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="../assets/w0wltb-32.png" />
+    <link rel="apple-touch-icon" href="../assets/w0wltb-128.png" />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="frame">
+        <header class="header">
+          <a class="brand" href="../index.html"><img src="../assets/w0wltb-48.png" alt="" />0wl</a>
+          <nav class="links" aria-label="Documentation">
+            <a class="button" href="../firefox-installation.html">install</a>
+            <a class="button" href="../development.html">develop</a>
+            <a class="button" href="process.html">release</a>
+          </nav>
+        </header>
+
+        <section class="section hero">
+          <h1>automatic updates</h1>
+          <p class="summary">
+            0wl 0.1.2 is approved on Mozilla Add-ons. Permanent Firefox installs can update through
+            AMO or a signed self-hosted release channel.
+          </p>
+          <div class="actions">
+            <a class="button" href="https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/"
+              >firefox add-ons listing</a
+            >
+          </div>
+        </section>
+
+        <section class="section stack">
+          <h2>AMO path</h2>
+          <p>
+            0wl is listed on addons.mozilla.org. After each new listed version is reviewed and
+            approved, Firefox handles extension updates for users.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>self-hosted path</h2>
+          <pre><code>UPDATE_BASE_URL="https://downloads.example.org/0wl" XPI_FILE="0wl-0.1.1.xpi" npm run updates:manifest</code></pre>
+          <p>
+            Host the signed XPI and generated <code>updates.json</code> over HTTPS, then ship a real
+            <code>gecko.update_url</code>.
+          </p>
+          <p class="muted">Do not ship a placeholder update URL.</p>
+        </section>
+
+        <section class="section stack">
+          <h2>update safety</h2>
+          <ul>
+            <li>Lifecycle metadata is recorded locally.</li>
+            <li>Settings are validated and migrated forward.</li>
+            <li>Dynamic block and limit rules are rebuilt from settings.</li>
+            <li>Stale active sessions are not credited with Firefox downtime.</li>
+          </ul>
+        </section>
+
+        <footer class="footer">
+          <a class="button" href="../index.html">home</a>
+        </footer>
+      </div>
+    </main>
+  </body>
+</html>

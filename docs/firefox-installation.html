@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>0wl installation</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/w0wltb-32.png" />
+    <link rel="apple-touch-icon" href="assets/w0wltb-128.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="frame">
+        <header class="header">
+          <a class="brand" href="index.html"><img src="assets/w0wltb-48.png" alt="" />0wl</a>
+          <nav class="links" aria-label="Documentation">
+            <a class="button" href="development.html">develop</a>
+            <a class="button" href="data-migration.html">data</a>
+            <a class="button" href="release/process.html">release</a>
+          </nav>
+        </header>
+
+        <section class="section hero">
+          <h1>firefox installation</h1>
+          <p class="summary">
+            0wl 0.1.2 is approved and listed on Mozilla Add-ons. It can also be loaded temporarily
+            for development.
+          </p>
+          <div class="actions">
+            <a class="button" href="https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/"
+              >install from firefox add-ons</a
+            >
+            <span class="muted">current approved release: 0.1.2</span>
+          </div>
+        </section>
+
+        <section class="section stack">
+          <h2>stable install</h2>
+          <p>
+            Install the public Mozilla-approved version from Firefox Add-ons. Firefox handles normal
+            AMO-listed installation and approved version updates.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>temporary install</h2>
+          <pre><code>npm install
+npm run build
+npm run firefox</code></pre>
+          <p>
+            For manual loading, open <code>about:debugging#/runtime/this-firefox</code> and select
+            <code>dist/manifest.json</code>.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>maintainer signing</h2>
+          <pre><code>npm run release:prepare
+npm run sign:firefox</code></pre>
+          <p>
+            Maintainers can still create signed release packages. The recommended persistent path
+            for normal users is the Firefox Add-ons listing.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>extension id</h2>
+          <pre><code>0wl@princengare.github.io</code></pre>
+          <p class="muted">
+            Keep this ID stable. Changing it makes Firefox treat the add-on as a different extension
+            and separates local extension data.
+          </p>
+        </section>
+
+        <footer class="footer">
+          <a class="button" href="index.html">home</a>
+        </footer>
+      </div>
+    </main>
+  </body>
+</html>

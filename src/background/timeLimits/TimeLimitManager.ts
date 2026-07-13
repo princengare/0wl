@@ -1,11 +1,24 @@
 import type { TimeLimitRuleManager } from "./TimeLimitRuleManager";
 import { buildTimeLimitPageUrl } from "./TimeLimitRuleBuilder";
 import type { DailyUsageRepository } from "@/db/repositories/DailyUsageRepository";
+import type { SessionRepository } from "@/db/repositories/SessionRepository";
 import type { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import type { SettingsStore } from "@/storage/SettingsStore";
 import { TIME_LIMIT_ALARM_NAME, TIME_LIMIT_BYPASS_DURATION_MS } from "@/shared/constants";
 import { normalizeDomain } from "@/shared/domain";
-import { getDateKey, splitDurationByLocalDate, startOfNextLocalDay } from "@/shared/time";
+import {
+  getScheduleIntervalsBetween,
+  isScheduleActive,
+  isScheduleAlways,
+  nextScheduleTransition,
+  overlapDurationMs
+} from "@/shared/schedule";
+import {
+  getDateKey,
+  splitDurationByLocalDate,
+  startOfLocalDay,
+  startOfNextLocalDay
+} from "@/shared/time";
 import { isTrackableUrl } from "@/shared/url";
 import type { ExtensionSettings, TimeLimitStatus, TimeLimitedDomain } from "@/shared/types";
 
@@ -13,6 +26,7 @@ interface TimeLimitManagerDependencies {
   settingsStore: SettingsStore;
   runtimeStateStore: RuntimeStateStore;
   dailyUsageRepository: DailyUsageRepository;
+  sessionRepository: SessionRepository;
   timeLimitRuleManager: TimeLimitRuleManager;
   now?: () => number;
 }
@@ -72,7 +86,7 @@ export class TimeLimitManager {
       throw new Error("This domain does not currently have an active time limit.");
     }
 
-    const usedMs = await this.getTodayUsageMs(domain, now);
+    const usedMs = await this.getTodayUsageMs(limited, now);
     const remainingMs = Math.max(0, limitMs(limited) - usedMs);
 
     return {
@@ -85,7 +99,7 @@ export class TimeLimitManager {
     };
   }
 
-  private async getTodayUsageMs(domain: string, now: number): Promise<number> {
+  private async getAlwaysActiveTodayUsageMs(domain: string, now: number): Promise<number> {
     const today = getDateKey(now);
     const rows = await this.dependencies.dailyUsageRepository.listByDate(today);
     const persistedMs = rows.find((row) => row.domain === domain)?.durationMs ?? 0;
@@ -108,15 +122,57 @@ export class TimeLimitManager {
     return persistedMs + liveMs;
   }
 
+  private async getScheduledTodayUsageMs(limited: TimeLimitedDomain, now: number): Promise<number> {
+    const todayStart = startOfLocalDay(now);
+    const todayEnd = startOfNextLocalDay(now);
+    const searchStart = todayStart - 24 * 60 * 60 * 1000;
+    const intervals = getScheduleIntervalsBetween(limited.schedule, todayStart, todayEnd);
+    const sessions = await this.dependencies.sessionRepository.getOverlapping(
+      searchStart,
+      todayEnd
+    );
+    const completedMs = sessions
+      .filter((session) => session.domain === limited.domain)
+      .reduce(
+        (total, session) =>
+          total + overlapDurationMs(session.startedAt, session.endedAt, intervals),
+        0
+      );
+    const runtimeState = await this.dependencies.runtimeStateStore.get(now);
+
+    if (
+      runtimeState.status !== "tracking" ||
+      runtimeState.domain !== limited.domain ||
+      runtimeState.sessionStartedAt === null ||
+      runtimeState.sessionStartedAt >= now
+    ) {
+      return completedMs;
+    }
+
+    return completedMs + overlapDurationMs(runtimeState.sessionStartedAt, now, intervals);
+  }
+
+  private async getTodayUsageMs(limited: TimeLimitedDomain, now: number): Promise<number> {
+    if (isScheduleAlways(limited.schedule)) {
+      return this.getAlwaysActiveTodayUsageMs(limited.domain, now);
+    }
+
+    return this.getScheduledTodayUsageMs(limited, now);
+  }
+
   private async getExceededDomains(settings: ExtensionSettings, now: number): Promise<string[]> {
     const exceeded: string[] = [];
 
     for (const limited of settings.timeLimitedDomains) {
-      if (!limited.enabled || hasActiveBypass(limited, now)) {
+      if (
+        !limited.enabled ||
+        hasActiveBypass(limited, now) ||
+        !isScheduleActive(limited.schedule, now)
+      ) {
         continue;
       }
 
-      const usedMs = await this.getTodayUsageMs(limited.domain, now);
+      const usedMs = await this.getTodayUsageMs(limited, now);
 
       if (usedMs >= limitMs(limited)) {
         exceeded.push(limited.domain);
@@ -144,11 +200,11 @@ export class TimeLimitManager {
       (candidate) => candidate.enabled && candidate.domain === runtimeState.domain
     );
 
-    if (!limited || hasActiveBypass(limited, now)) {
+    if (!limited || hasActiveBypass(limited, now) || !isScheduleActive(limited.schedule, now)) {
       return;
     }
 
-    const usedMs = await this.getTodayUsageMs(limited.domain, now);
+    const usedMs = await this.getTodayUsageMs(limited, now);
 
     if (usedMs < limitMs(limited)) {
       return;
@@ -180,11 +236,21 @@ export class TimeLimitManager {
         candidates.push(limited.bypassUntil);
       }
 
+      const nextTransition = nextScheduleTransition(limited.schedule, now);
+
+      if (nextTransition) {
+        candidates.push(nextTransition);
+      }
+
       if (runtimeState.status === "tracking" && runtimeState.domain === limited.domain) {
-        const usedMs = await this.getTodayUsageMs(limited.domain, now);
+        if (!isScheduleActive(limited.schedule, now) || hasActiveBypass(limited, now)) {
+          continue;
+        }
+
+        const usedMs = await this.getTodayUsageMs(limited, now);
         const remainingMs = limitMs(limited) - usedMs;
 
-        if (!hasActiveBypass(limited, now) && remainingMs > 0) {
+        if (remainingMs > 0) {
           candidates.push(now + remainingMs);
         }
       }

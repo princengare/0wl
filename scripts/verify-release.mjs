@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = process.cwd();
@@ -18,6 +18,27 @@ function assert(condition, message) {
 
 function assertDistPath(path, label) {
   assert(existsSync(resolve(root, "dist", path)), `${label} is missing from dist: ${path}`);
+}
+
+function listDistJavaScriptFiles(directory = resolve(root, "dist")) {
+  if (!existsSync(directory)) {
+    return [];
+  }
+
+  const paths = [];
+
+  for (const entry of readdirSync(directory)) {
+    const path = resolve(directory, entry);
+    const stats = statSync(path);
+
+    if (stats.isDirectory()) {
+      paths.push(...listDistJavaScriptFiles(path));
+    } else if (path.endsWith(".js")) {
+      paths.push(path);
+    }
+  }
+
+  return paths;
 }
 
 const packageJsonPath = resolve(root, "package.json");
@@ -111,6 +132,14 @@ if (failures.length === 0) {
     assert(
       typeof namedLicense === "string" || hasLocalizedCustomLicense,
       "AMO metadata must define version.license or localized version.custom_license.name/text."
+    );
+  }
+
+  for (const scriptPath of listDistJavaScriptFiles()) {
+    const script = readFileSync(scriptPath, "utf8");
+    assert(
+      !/\binnerHTML\s*=/.test(script),
+      `Unsafe innerHTML assignment found in ${scriptPath}.`
     );
   }
 }

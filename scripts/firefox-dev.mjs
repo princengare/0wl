@@ -1,23 +1,54 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = process.cwd();
 const profileDir = resolve(root, ".web-ext-profile");
-const distManifest = resolve(root, "dist", "manifest.json");
 const children = new Set();
 
-function spawnCommand(command, args, label) {
+function spawnCommand(command, args, label, options = {}) {
   const child = spawn(command, args, {
     cwd: root,
-    stdio: "inherit",
+    stdio: options.readyPattern ? ["inherit", "pipe", "pipe"] : "inherit",
     shell: process.platform === "win32"
   });
 
   children.add(child);
+
+  let ready = options.readyPattern ? null : Promise.resolve();
+
+  if (options.readyPattern) {
+    ready = new Promise((resolvePromise, reject) => {
+      let resolved = false;
+
+      function handleOutput(chunk) {
+        const output = chunk.toString();
+        process.stdout.write(output);
+
+        if (!resolved && options.readyPattern.test(output)) {
+          resolved = true;
+          resolvePromise();
+        }
+      }
+
+      child.stdout.on("data", handleOutput);
+      child.stderr.on("data", handleOutput);
+
+      child.on("exit", (code, signal) => {
+        if (!resolved) {
+          reject(
+            new Error(
+              `${label} exited before initial build finished${
+                signal ? ` with signal ${signal}` : ` with code ${code}`
+              }`
+            )
+          );
+        }
+      });
+    });
+  }
 
   child.on("exit", (code, signal) => {
     children.delete(child);
@@ -30,7 +61,7 @@ function spawnCommand(command, args, label) {
     shutdown(code ?? 1);
   });
 
-  return child;
+  return { child, ready };
 }
 
 function runOnce(command, args, label) {
@@ -76,13 +107,18 @@ process.on("SIGTERM", () => shutdown(0));
 console.log("Starting 0wl Firefox development environment...");
 await mkdir(profileDir, { recursive: true });
 
-if (!existsSync(distManifest)) {
-  console.log("No built extension found. Running initial build...");
-  await runOnce("npm", ["run", "build"], "initial build");
-}
+console.log("Running initial build so Firefox never loads a half-built extension...");
+await runOnce("npm", ["run", "build"], "initial build");
 
 spawnCommand("npm", ["run", "typecheck:watch"], "typecheck watch");
-spawnCommand("npm", ["run", "build:watch"], "Vite build watch");
+const viteWatch = spawnCommand("npm", ["run", "build:watch"], "Vite build watch", {
+  readyPattern: /built in \d+ms|built in \d+\.\d+s/
+});
+
+console.log("Waiting for Vite watch to finish its first build...");
+await viteWatch.ready;
+console.log("Initial watched build finished. Launching Firefox...");
+
 spawnCommand(
   "npx",
   [

@@ -40,10 +40,26 @@ export interface BlockAttempt {
   count: number;
 }
 
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface AlwaysSchedule {
+  mode: "always";
+}
+
+export interface CustomSchedule {
+  mode: "custom";
+  daysOfWeek: DayOfWeek[];
+  startMinutes: number;
+  endMinutes: number;
+}
+
+export type ScheduleConfig = AlwaysSchedule | CustomSchedule;
+
 export interface BlockedDomain {
   id: string;
   domain: string;
   enabled: boolean;
+  schedule: ScheduleConfig;
   createdAt: number;
 }
 
@@ -52,6 +68,7 @@ export interface TimeLimitedDomain {
   domain: string;
   enabled: boolean;
   limitMinutes: number;
+  schedule: ScheduleConfig;
   createdAt: number;
   bypassUntil: number | null;
 }
@@ -162,6 +179,7 @@ export interface TimeLimitStatus {
 export type MessageRequest =
   | { type: "GET_TODAY_SUMMARY" }
   | { type: "GET_HISTORY"; range: HistoryRange }
+  | { type: "GET_HISTORY_INTERVAL"; startedAt: number; endedAt: number }
   | { type: "GET_SETTINGS" }
   | {
       type: "UPDATE_SETTINGS";
@@ -172,13 +190,26 @@ export type MessageRequest =
         >
       >;
     }
-  | { type: "ADD_BLOCKED_DOMAIN"; input: string }
+  | { type: "ADD_BLOCKED_DOMAIN"; input: string; schedule?: ScheduleConfig }
   | { type: "REMOVE_BLOCKED_DOMAIN"; id: string }
   | { type: "SET_BLOCKED_DOMAIN_ENABLED"; id: string; enabled: boolean }
-  | { type: "ADD_TIME_LIMITED_DOMAIN"; input: string; limitMinutes: number }
+  | { type: "UPDATE_BLOCKED_DOMAIN"; id: string; input: string; schedule: ScheduleConfig }
+  | { type: "UPDATE_BLOCKED_DOMAIN_SCHEDULE"; id: string; schedule: ScheduleConfig }
+  | {
+      type: "ADD_TIME_LIMITED_DOMAIN";
+      input: string;
+      limitMinutes: number;
+      schedule?: ScheduleConfig;
+    }
   | { type: "REMOVE_TIME_LIMITED_DOMAIN"; id: string }
   | { type: "SET_TIME_LIMITED_DOMAIN_ENABLED"; id: string; enabled: boolean }
-  | { type: "UPDATE_TIME_LIMITED_DOMAIN"; id: string; limitMinutes: number }
+  | {
+      type: "UPDATE_TIME_LIMITED_DOMAIN";
+      id: string;
+      input?: string;
+      limitMinutes: number;
+      schedule?: ScheduleConfig;
+    }
   | { type: "GET_TIME_LIMIT_STATUS"; domain: string }
   | { type: "BYPASS_TIME_LIMIT"; domain: string }
   | { type: "GET_RUNTIME_STATE" }

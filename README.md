@@ -4,6 +4,10 @@
 
 Project site: https://princengare.github.io/0wl/
 
+Firefox Add-ons listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
+
+Current Mozilla-approved release: `0.1.2`
+
 ## Open Source and Repository Safety
 
 0wl is intended to be an open source extension that users can clone, build, inspect, and run for themselves.
@@ -38,7 +42,11 @@ Ignored entries such as `node_modules/`, `dist/`, `.DS_Store`, Firefox profiles,
 
 ## Quick Start
 
-Install dependencies:
+Install the stable Mozilla-approved release from Firefox Add-ons:
+
+https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
+
+For local development, install dependencies:
 
 ```sh
 npm install
@@ -82,24 +90,24 @@ Detailed guides:
 
 Useful commands:
 
-| Command                    | Purpose                                                                      |
-| -------------------------- | ---------------------------------------------------------------------------- |
-| `npm run typecheck`        | Run TypeScript without emitting files.                                       |
-| `npm run typecheck:watch`  | Watch TypeScript and surface type errors.                                    |
-| `npm run build`            | Type-check and build the production extension into `dist/`.                  |
-| `npm run build:watch`      | Rebuild extension assets when source files change.                           |
-| `npm run firefox`          | Launch Firefox with the built extension from `dist/`.                        |
-| `npm run firefox:dev`      | Build, watch, launch Firefox, and reload the extension after source changes. |
-| `npm run test`             | Run all Vitest tests.                                                        |
-| `npm run lint`             | Run ESLint.                                                                  |
-| `npm run web-ext:lint`     | Validate the built extension with Mozilla `web-ext lint`.                    |
-| `npm run release:check`    | Inspect the built manifest and referenced output files.                      |
-| `npm run release:prepare`  | Run lint, tests, build, release verification, web-ext lint, and package.     |
-| `npm run package`          | Build an unsigned package artifact in `web-ext-artifacts/`.                  |
-| `npm run sign:firefox`     | Sign the built extension through Mozilla Add-ons credentials.                |
-| `npm run updates:manifest` | Generate a self-hosted Firefox update manifest from `UPDATE_BASE_URL`.       |
+| Command                    | Purpose                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `npm run typecheck`        | Run TypeScript without emitting files.                                                           |
+| `npm run typecheck:watch`  | Watch TypeScript and surface type errors.                                                        |
+| `npm run build`            | Type-check and build the production extension into `dist/`.                                      |
+| `npm run build:watch`      | Rebuild extension assets when source files change.                                               |
+| `npm run firefox`          | Launch Firefox with the built extension from `dist/`.                                            |
+| `npm run firefox:dev`      | Build, watch, wait for the first watched build, launch Firefox, and reload after source changes. |
+| `npm run test`             | Run all Vitest tests.                                                                            |
+| `npm run lint`             | Run ESLint.                                                                                      |
+| `npm run web-ext:lint`     | Validate the built extension with Mozilla `web-ext lint`.                                        |
+| `npm run release:check`    | Inspect the built manifest and referenced output files.                                          |
+| `npm run release:prepare`  | Run lint, tests, build, release verification, web-ext lint, and package.                         |
+| `npm run package`          | Build an unsigned package artifact in `web-ext-artifacts/`.                                      |
+| `npm run sign:firefox`     | Sign the built extension through Mozilla Add-ons credentials.                                    |
+| `npm run updates:manifest` | Generate a self-hosted Firefox update manifest from `UPDATE_BASE_URL`.                           |
 
-Persistent installation in regular Firefox requires a signed `.xpi`. Automatic updates require either AMO distribution or a real HTTPS self-hosted update manifest URL.
+The public stable release is now listed on Mozilla Add-ons. Persistent self-distributed installs still require a signed `.xpi`, and self-hosted automatic updates require a real HTTPS update manifest URL.
 
 ## How To Use It
 
@@ -161,15 +169,37 @@ Live active-session time is included in the displayed total without prematurely 
 
 ### History
 
-Use `History` to review completed browsing sessions.
+Use `History` to review completed browsing sessions and terminal-style usage charts.
 
-Available ranges:
+Available tabs:
 
 - `Today`
 - `Yesterday`
-- `Last 7 days`
+- `this week`
 
-Each history row shows:
+Today and Yesterday show a 24-hour bar graph:
+
+- One bar per hour.
+- Bars are scaled against a full hour.
+- Grey dotted markers label `6 AM`, `12 PM`, and `6 PM`.
+- Empty hours are not clickable.
+- Clicking a non-empty hour replaces the timestamp list with a ranked per-site breakdown for that hour.
+
+Today keeps the individual timestamp/session list when no bar is selected.
+
+Yesterday shows the hourly chart and only shows per-site details after an hour is selected.
+
+The `this week` tab shows the current local calendar week:
+
+- One bar per day.
+- Bars are scaled against 24 hours.
+- Empty days are not clickable.
+- The dotted average line excludes days with no tracked usage.
+- Previous/next week controls appear when previous-week data exists.
+
+History durations under one minute are shown in seconds.
+
+Timestamp rows show:
 
 - Start and end time.
 - Normalized domain.
@@ -183,6 +213,7 @@ To block a site:
 
 1. Enter a website, such as `instagram.com`, `www.instagram.com`, or `https://instagram.com/reels/`.
 2. Click `Block`.
+3. Choose whether the block is `Always` active or uses a custom schedule.
 
 0wl normalizes valid input to the registrable domain. Examples:
 
@@ -193,10 +224,19 @@ To block a site:
 
 Blocked domains are enforced immediately through Firefox Manifest V3 `declarativeNetRequest` dynamic rules.
 
+Blocked-site schedules support:
+
+- Always-active blocking.
+- Custom selected days.
+- All-days, weekdays, and weekends shortcuts.
+- Local start and end times.
+- Overnight windows such as `10:00 PM-7:00 AM`.
+
 For each blocked site, you can:
 
 - See whether it is `Active` or `Paused`.
 - Toggle it on or off.
+- Change the schedule.
 - Remove it.
 
 Blocking applies to top-level navigations only. It blocks the configured domain and normal subdomains without blocking subresources embedded on unrelated websites.
@@ -209,23 +249,41 @@ To add a time limit:
 
 1. Enter a website, such as `youtube.com`, `www.youtube.com`, or `https://youtube.com/watch?v=123`.
 2. Choose a daily limit.
-3. Click `Limit`.
+3. Choose whether the limit is `Always` active or uses a custom schedule.
+4. Click `Limit`.
 
 Supported daily limits:
 
-- `1 minute`
-- `5 minutes`
-- `10 minutes`
-- `15 minutes`
-- `30 minutes`
-- `1 hour`
-- `2 hours`
+- `1 min`
+- `5 min`
+- `10 min`
+- `15 min`
+- `30 min`
+- `45 min`
+- `1 hr`
+- `1 hr 30 min`
+- `2 hr`
+- `2 hr 30 min`
+- `3 hr`
+- `3 hr 30 min`
+- `4 hr`
+- `4 hr 30 min`
+- `5 hr`
+
+Time-limit schedules support:
+
+- Always-active limits.
+- Custom selected days.
+- All-days, weekdays, and weekends shortcuts.
+- Local start and end times.
+- Overnight windows such as `10:00 PM-2:00 AM`.
 
 For each time-limited site, you can:
 
 - See whether it is `Active` or `Paused`.
 - Toggle it on or off.
 - Change the daily limit.
+- Change the schedule.
 - Remove it.
 
 0wl enforces time limits using today’s tracked usage for the normalized domain. When the active site reaches its limit, the background schedules and responds through `browser.alarms` instead of a forever-running timer. Once a domain is over its limit, 0wl also installs a dynamic main-frame redirect rule so new navigations to that domain land on the limit page.
@@ -289,20 +347,24 @@ Changing the idle threshold updates Firefox idle detection immediately.
 | Startup recovery                       | Background               | Invalidates stale runtime tracking state without counting Firefox downtime.                              |
 | Today summary                          | Popup, Dashboard         | Shows total tracked time today and ranked domains.                                                       |
 | Current session display                | Popup                    | Shows the current tracked domain and current-session elapsed time.                                       |
-| History display                        | Dashboard                | Shows completed sessions for today, yesterday, or the last 7 days.                                       |
-| Add blocked domain                     | Dashboard                | Normalizes input, rejects duplicates, saves settings, and installs a dynamic DNR redirect rule.          |
+| History display                        | Dashboard                | Shows session history plus hourly and calendar-week bar charts built from raw sessions.                  |
+| History bar selection                  | Dashboard                | Shows per-site totals for selected non-empty hours or days.                                              |
+| Calendar-week average                  | Dashboard                | Shows average usage for the displayed calendar week, excluding zero-usage days.                          |
+| Add blocked domain                     | Dashboard                | Normalizes input, rejects duplicates, saves settings, and installs an active dynamic DNR redirect rule.  |
+| Schedule blocked domain                | Dashboard                | Applies blocking always or only during selected local days and times.                                    |
 | Pause/resume blocked domain            | Dashboard                | Enables or disables a saved blocked domain and syncs DNR rules.                                          |
 | Remove blocked domain                  | Dashboard                | Removes the domain from settings and removes its dynamic DNR rule.                                       |
 | Blocked navigation redirect            | Browser/DNR              | Redirects blocked main-frame navigations to `blocked/index.html`.                                        |
 | Block attempt recording                | Blocked page, Background | Validates the blocked domain and records a minute-bucketed local attempt.                                |
 | Block attempt count                    | Blocked page             | Shows today’s count when the setting is enabled.                                                         |
 | Add time-limited domain                | Dashboard                | Normalizes input, rejects duplicates, saves a daily limit, and refreshes enforcement.                    |
+| Schedule time-limited domain           | Dashboard                | Applies limits always or only during selected local days and times.                                      |
 | Pause/resume time-limited domain       | Dashboard                | Enables or disables a saved time limit and refreshes enforcement.                                        |
 | Update time limit                      | Dashboard                | Changes a saved domain’s daily limit and clears any active bypass.                                       |
 | Remove time-limited domain             | Dashboard                | Removes the saved limit and removes any corresponding DNR rule.                                          |
 | Time-limit redirect                    | Browser/DNR, Background  | Redirects an over-limit main-frame navigation or active tab to `limit/index.html`.                       |
 | Time-limit bypass                      | Limit page, Background   | Validates the domain and bypasses the daily limit for 15 minutes.                                        |
-| Alarm-based limit enforcement          | Background               | Schedules one-shot wakeups for the next active limit, bypass expiry, or local midnight.                  |
+| Alarm-based schedule enforcement       | Background               | Schedules one-shot wakeups for block transitions, limit windows, bypass expiry, or local midnight.       |
 | Install/update lifecycle recording     | Background               | Records non-sensitive extension version, previous version, install reason, and temporary-install status. |
 | Settings migration                     | Background               | Repairs legacy or malformed local settings before syncing blocking, time-limit, and idle behavior.       |
 | Update-safe recovery                   | Background               | Invalidates stale active sessions on install/update without counting unknown Firefox downtime.           |
@@ -317,24 +379,26 @@ Changing the idle threshold updates Firefox idle detection immediately.
 
 The React pages communicate with the background through typed `browser.runtime.sendMessage` requests.
 
-| Message                           | Caller                  | Response                 | Purpose                                                                |
-| --------------------------------- | ----------------------- | ------------------------ | ---------------------------------------------------------------------- |
-| `GET_TODAY_SUMMARY`               | Popup, Dashboard        | `TodaySummary`           | Returns today’s aggregate usage plus live current-session time.        |
-| `GET_HISTORY`                     | Dashboard               | `HistorySessionView[]`   | Returns completed sessions for `today`, `yesterday`, or `last-7-days`. |
-| `GET_SETTINGS`                    | Dashboard, Blocked page | `ExtensionSettings`      | Returns extension settings from `browser.storage.local`.               |
-| `UPDATE_SETTINGS`                 | Dashboard               | `ExtensionSettings`      | Updates tracking, idle threshold, or attempt-count visibility.         |
-| `ADD_BLOCKED_DOMAIN`              | Dashboard               | `ExtensionSettings`      | Normalizes and adds a blocked domain, then syncs DNR rules.            |
-| `REMOVE_BLOCKED_DOMAIN`           | Dashboard               | `ExtensionSettings`      | Removes a blocked domain and syncs DNR rules.                          |
-| `SET_BLOCKED_DOMAIN_ENABLED`      | Dashboard               | `ExtensionSettings`      | Enables or pauses a blocked domain and syncs DNR rules.                |
-| `ADD_TIME_LIMITED_DOMAIN`         | Dashboard               | `ExtensionSettings`      | Normalizes and adds a daily time limit, then refreshes enforcement.    |
-| `REMOVE_TIME_LIMITED_DOMAIN`      | Dashboard               | `ExtensionSettings`      | Removes a daily time limit and refreshes enforcement.                  |
-| `SET_TIME_LIMITED_DOMAIN_ENABLED` | Dashboard               | `ExtensionSettings`      | Enables or pauses a daily time limit and refreshes enforcement.        |
-| `UPDATE_TIME_LIMITED_DOMAIN`      | Dashboard               | `ExtensionSettings`      | Updates the daily limit for a saved domain.                            |
-| `GET_TIME_LIMIT_STATUS`           | Limit page              | `TimeLimitStatus`        | Returns used time, remaining time, exceeded status, and bypass state.  |
-| `BYPASS_TIME_LIMIT`               | Limit page              | `TimeLimitStatus`        | Grants a validated 15-minute bypass for an active time-limited domain. |
-| `GET_RUNTIME_STATE`               | Internal/debug use      | `PersistedTrackingState` | Returns current persisted runtime tracking state.                      |
-| `GET_BLOCKED_ATTEMPT_COUNT`       | Blocked page            | `number`                 | Returns today’s blocked-attempt count for a validated domain.          |
-| `RECORD_BLOCK_ATTEMPT`            | Blocked page            | `BlockAttempt`           | Validates the domain is currently blocked and records a local attempt. |
+| Message                           | Caller                  | Response                 | Purpose                                                                                       |
+| --------------------------------- | ----------------------- | ------------------------ | --------------------------------------------------------------------------------------------- |
+| `GET_TODAY_SUMMARY`               | Popup, Dashboard        | `TodaySummary`           | Returns today’s aggregate usage plus live current-session time.                               |
+| `GET_HISTORY`                     | Dashboard               | `HistorySessionView[]`   | Returns completed sessions for `today`, `yesterday`, or the active history range.             |
+| `GET_HISTORY_INTERVAL`            | Dashboard               | `HistorySessionView[]`   | Returns raw sessions overlapping an exact local-time interval, used for calendar weeks.       |
+| `GET_SETTINGS`                    | Dashboard, Blocked page | `ExtensionSettings`      | Returns extension settings from `browser.storage.local`.                                      |
+| `UPDATE_SETTINGS`                 | Dashboard               | `ExtensionSettings`      | Updates tracking, idle threshold, or attempt-count visibility.                                |
+| `ADD_BLOCKED_DOMAIN`              | Dashboard               | `ExtensionSettings`      | Normalizes and adds a blocked domain with an optional schedule, then syncs DNR rules.         |
+| `REMOVE_BLOCKED_DOMAIN`           | Dashboard               | `ExtensionSettings`      | Removes a blocked domain and syncs DNR rules.                                                 |
+| `SET_BLOCKED_DOMAIN_ENABLED`      | Dashboard               | `ExtensionSettings`      | Enables or pauses a blocked domain and syncs DNR rules.                                       |
+| `UPDATE_BLOCKED_DOMAIN_SCHEDULE`  | Dashboard               | `ExtensionSettings`      | Updates a blocked domain schedule and resyncs active DNR rules.                               |
+| `ADD_TIME_LIMITED_DOMAIN`         | Dashboard               | `ExtensionSettings`      | Normalizes and adds a daily time limit with an optional schedule, then refreshes enforcement. |
+| `REMOVE_TIME_LIMITED_DOMAIN`      | Dashboard               | `ExtensionSettings`      | Removes a daily time limit and refreshes enforcement.                                         |
+| `SET_TIME_LIMITED_DOMAIN_ENABLED` | Dashboard               | `ExtensionSettings`      | Enables or pauses a daily time limit and refreshes enforcement.                               |
+| `UPDATE_TIME_LIMITED_DOMAIN`      | Dashboard               | `ExtensionSettings`      | Updates the daily limit or schedule for a saved domain.                                       |
+| `GET_TIME_LIMIT_STATUS`           | Limit page              | `TimeLimitStatus`        | Returns used time, remaining time, exceeded status, and bypass state.                         |
+| `BYPASS_TIME_LIMIT`               | Limit page              | `TimeLimitStatus`        | Grants a validated 15-minute bypass for an active time-limited domain.                        |
+| `GET_RUNTIME_STATE`               | Internal/debug use      | `PersistedTrackingState` | Returns current persisted runtime tracking state.                                             |
+| `GET_BLOCKED_ATTEMPT_COUNT`       | Blocked page            | `number`                 | Returns today’s blocked-attempt count for a validated domain.                                 |
+| `RECORD_BLOCK_ATTEMPT`            | Blocked page            | `BlockAttempt`           | Validates the domain is currently blocked and records a local attempt.                        |
 
 ### Tracking States
 

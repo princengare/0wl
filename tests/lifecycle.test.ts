@@ -1,9 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import process from "node:process";
 import { ExtensionLifecycleManager } from "@/background/lifecycle/ExtensionLifecycleManager";
+import { runMigrations } from "@/db/migrations";
+import { SessionRepository } from "@/db/repositories/SessionRepository";
 import { LifecycleStore } from "@/storage/LifecycleStore";
 import { SettingsStore } from "@/storage/SettingsStore";
 import { LIFECYCLE_STORAGE_KEY, SETTINGS_STORAGE_KEY } from "@/shared/constants";
+import type { UsageSession } from "@/shared/types";
 import { MemoryStorageArea } from "./helpers/memoryStorage";
+
+async function listSourceFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map((entry) => {
+      const path = join(directory, entry.name);
+      return entry.isDirectory() ? listSourceFiles(path) : Promise.resolve([path]);
+    })
+  );
+
+  return files.flat().filter((path) => /\.(ts|tsx)$/.test(path));
+}
 
 describe("extension lifecycle and migrations", () => {
   beforeEach(() => {
@@ -53,6 +71,16 @@ describe("extension lifecycle and migrations", () => {
         blockedDomains: [
           { id: "blocked-1", domain: "www.instagram.com", enabled: true, createdAt: 1 }
         ],
+        timeLimitedDomains: [
+          {
+            id: "limit-1",
+            domain: "www.youtube.com",
+            enabled: true,
+            limitMinutes: 30,
+            createdAt: 2,
+            bypassUntil: null
+          }
+        ],
         ignoredDomains: ["m.reddit.com"],
         showBlockedAttemptCount: true,
         createdAt: 1,
@@ -67,12 +95,25 @@ describe("extension lifecycle and migrations", () => {
     expect(migration.changed).toBe(true);
     expect(migration.created).toBe(false);
     expect(migration.settings.blockedDomains[0]?.domain).toBe("instagram.com");
-    expect(migration.settings.timeLimitedDomains).toEqual([]);
+    expect(migration.settings.blockedDomains[0]?.schedule).toEqual({ mode: "always" });
+    expect(migration.settings.timeLimitedDomains[0]).toMatchObject({
+      domain: "youtube.com",
+      schedule: { mode: "always" }
+    });
     expect(migration.settings.ignoredDomains).toEqual(["reddit.com"]);
     expect(persisted[SETTINGS_STORAGE_KEY]).toMatchObject({
-      timeLimitedDomains: [],
       updatedAt: 20
     });
+  });
+
+  it("does not contain runtime code that clears extension persistence", async () => {
+    const sourceFiles = await listSourceFiles(join(process.cwd(), "src"));
+    const contents = await Promise.all(sourceFiles.map((path) => readFile(path, "utf8")));
+    const source = contents.join("\n");
+
+    expect(source).not.toContain("browser.storage.local.clear(");
+    expect(source).not.toContain("indexedDB.deleteDatabase(");
+    expect(source).not.toContain("deleteObjectStore(");
   });
 
   it("records migration metadata without storing browsing data", async () => {
@@ -87,5 +128,26 @@ describe("extension lifecycle and migrations", () => {
       lastMigrationAt: 30,
       migrationRevision: 1
     });
+  });
+
+  it("runs IndexedDB migrations without deleting existing sessions", async () => {
+    const sessionRepository = new SessionRepository();
+    const id = `preserved-session-${Date.now()}`;
+    const session: UsageSession = {
+      id,
+      domain: "github.com",
+      startedAt: 1,
+      endedAt: 61_000,
+      durationMs: 60_000,
+      startReason: "startup",
+      endReason: "navigation",
+      dateKey: "1970-01-01",
+      createdAt: 61_000
+    };
+
+    await sessionRepository.add(session);
+    await runMigrations();
+
+    expect(await sessionRepository.getByDateKey("1970-01-01")).toContainEqual(session);
   });
 });

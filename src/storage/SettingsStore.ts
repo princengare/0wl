@@ -1,6 +1,12 @@
 import { normalizeDomain } from "@/shared/domain";
 import { SETTINGS_STORAGE_KEY, createDefaultSettings } from "./defaults";
-import type { BlockedDomain, ExtensionSettings, TimeLimitedDomain } from "@/shared/types";
+import { ALWAYS_SCHEDULE, normalizeSchedule } from "@/shared/schedule";
+import type {
+  BlockedDomain,
+  ExtensionSettings,
+  ScheduleConfig,
+  TimeLimitedDomain
+} from "@/shared/types";
 import { DEFAULT_IDLE_THRESHOLD_SECONDS } from "@/shared/constants";
 import { isPlainObject, isValidIdleThreshold, isValidTimeLimitMinutes } from "@/shared/validation";
 
@@ -17,17 +23,23 @@ export interface SettingsMigrationResult {
   changed: boolean;
 }
 
-function createBlockedDomainId(domain: string, now: number): string {
+function createBlockedDomainId(domain: string, now: number, existingIds: Set<string>): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
+    const id = crypto.randomUUID();
+    if (!existingIds.has(id)) {
+      return id;
+    }
   }
 
   return `${domain}-${now}`;
 }
 
-function createTimeLimitedDomainId(domain: string, now: number): string {
+function createTimeLimitedDomainId(domain: string, now: number, existingIds: Set<string>): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
+    const id = crypto.randomUUID();
+    if (!existingIds.has(id)) {
+      return id;
+    }
   }
 
   return `limit-${domain}-${now}`;
@@ -79,15 +91,18 @@ function normalizeBlockedDomains(value: unknown): {
         ? candidate.id
         : `${domain}-${candidate.createdAt}`;
 
+    const schedule = normalizeSchedule(candidate.schedule);
+
     blockedDomains.push({
       id,
       domain,
       enabled: candidate.enabled,
+      schedule: schedule.schedule,
       createdAt: candidate.createdAt
     });
     seenDomains.add(domain);
 
-    changed ||= id !== candidate.id || domain !== candidate.domain;
+    changed ||= id !== candidate.id || domain !== candidate.domain || schedule.changed;
   }
 
   return { blockedDomains, changed };
@@ -137,17 +152,20 @@ function normalizeTimeLimitedDomains(value: unknown): {
         ? candidate.id
         : `limit-${domain}-${candidate.createdAt}`;
 
+    const schedule = normalizeSchedule(candidate.schedule);
+
     timeLimitedDomains.push({
       id,
       domain,
       enabled: candidate.enabled,
       limitMinutes: candidate.limitMinutes,
+      schedule: schedule.schedule,
       createdAt: candidate.createdAt,
       bypassUntil: candidate.bypassUntil
     });
     seenDomains.add(domain);
 
-    changed ||= id !== candidate.id || domain !== candidate.domain;
+    changed ||= id !== candidate.id || domain !== candidate.domain || schedule.changed;
   }
 
   return { timeLimitedDomains, changed };
@@ -296,7 +314,11 @@ export class SettingsStore {
     return next;
   }
 
-  async addBlockedDomain(input: string, now = Date.now()): Promise<BlockedDomain> {
+  async addBlockedDomain(
+    input: string,
+    now = Date.now(),
+    scheduleInput: ScheduleConfig = ALWAYS_SCHEDULE
+  ): Promise<BlockedDomain> {
     const domain = normalizeDomain(input);
     const settings = await this.get(now);
 
@@ -305,9 +327,14 @@ export class SettingsStore {
     }
 
     const blockedDomain: BlockedDomain = {
-      id: createBlockedDomainId(domain, now),
+      id: createBlockedDomainId(
+        domain,
+        now,
+        new Set(settings.blockedDomains.map((blocked) => blocked.id))
+      ),
       domain,
       enabled: true,
+      schedule: normalizeSchedule(scheduleInput).schedule,
       createdAt: now
     };
 
@@ -340,6 +367,49 @@ export class SettingsStore {
     });
   }
 
+  async updateBlockedDomain(
+    id: string,
+    input: string,
+    scheduleInput: ScheduleConfig,
+    now = Date.now()
+  ): Promise<void> {
+    const domain = normalizeDomain(input);
+    const settings = await this.get(now);
+
+    if (!settings.blockedDomains.some((blocked) => blocked.id === id)) {
+      throw new Error("Blocked domain not found.");
+    }
+
+    if (settings.blockedDomains.some((blocked) => blocked.id !== id && blocked.domain === domain)) {
+      throw new Error(`${domain} is already blocked.`);
+    }
+
+    const schedule = normalizeSchedule(scheduleInput).schedule;
+    await this.save({
+      ...settings,
+      blockedDomains: settings.blockedDomains.map((blocked) =>
+        blocked.id === id ? { ...blocked, domain, schedule } : blocked
+      ),
+      updatedAt: now
+    });
+  }
+
+  async updateBlockedDomainSchedule(
+    id: string,
+    scheduleInput: ScheduleConfig,
+    now = Date.now()
+  ): Promise<void> {
+    const settings = await this.get(now);
+    const schedule = normalizeSchedule(scheduleInput).schedule;
+    await this.save({
+      ...settings,
+      blockedDomains: settings.blockedDomains.map((blocked) =>
+        blocked.id === id ? { ...blocked, schedule } : blocked
+      ),
+      updatedAt: now
+    });
+  }
+
   async getEnabledBlockedDomains(now = Date.now()): Promise<BlockedDomain[]> {
     const settings = await this.get(now);
     return settings.blockedDomains.filter((blocked) => blocked.enabled);
@@ -348,7 +418,8 @@ export class SettingsStore {
   async addTimeLimitedDomain(
     input: string,
     limitMinutes: number,
-    now = Date.now()
+    now = Date.now(),
+    scheduleInput: ScheduleConfig = ALWAYS_SCHEDULE
   ): Promise<TimeLimitedDomain> {
     if (!isValidTimeLimitMinutes(limitMinutes)) {
       throw new Error("Choose a supported time limit.");
@@ -362,10 +433,15 @@ export class SettingsStore {
     }
 
     const timeLimitedDomain: TimeLimitedDomain = {
-      id: createTimeLimitedDomainId(domain, now),
+      id: createTimeLimitedDomainId(
+        domain,
+        now,
+        new Set(settings.timeLimitedDomains.map((limited) => limited.id))
+      ),
       domain,
       enabled: true,
       limitMinutes,
+      schedule: normalizeSchedule(scheduleInput).schedule,
       createdAt: now,
       bypassUntil: null
     };
@@ -399,16 +475,45 @@ export class SettingsStore {
     });
   }
 
-  async updateTimeLimitedDomain(id: string, limitMinutes: number, now = Date.now()): Promise<void> {
+  async updateTimeLimitedDomain(
+    id: string,
+    limitMinutes: number,
+    scheduleInput?: ScheduleConfig,
+    now = Date.now(),
+    input?: string
+  ): Promise<void> {
     if (!isValidTimeLimitMinutes(limitMinutes)) {
       throw new Error("Choose a supported time limit.");
     }
 
     const settings = await this.get(now);
+    const domain = input ? normalizeDomain(input) : null;
+
+    if (!settings.timeLimitedDomains.some((limited) => limited.id === id)) {
+      throw new Error("Time limit not found.");
+    }
+
+    if (
+      domain &&
+      settings.timeLimitedDomains.some((limited) => limited.id !== id && limited.domain === domain)
+    ) {
+      throw new Error(`${domain} already has a time limit.`);
+    }
+
     await this.save({
       ...settings,
       timeLimitedDomains: settings.timeLimitedDomains.map((limited) =>
-        limited.id === id ? { ...limited, limitMinutes, bypassUntil: null } : limited
+        limited.id === id
+          ? {
+              ...limited,
+              domain: domain ?? limited.domain,
+              limitMinutes,
+              schedule: scheduleInput
+                ? normalizeSchedule(scheduleInput).schedule
+                : limited.schedule,
+              bypassUntil: null
+            }
+          : limited
       ),
       updatedAt: now
     });

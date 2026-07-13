@@ -1,5 +1,17 @@
 # Firefox Installation
 
+## Stable Firefox Add-ons Installation
+
+0wl is approved and listed on Mozilla Add-ons.
+
+Current approved version: `0.1.2`
+
+Install from Firefox Add-ons:
+
+https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
+
+Firefox handles normal AMO-listed extension installation and updates after approved versions are published.
+
 ## Temporary Development Installation
 
 For local development:
@@ -12,13 +24,17 @@ npm run firefox
 
 Or load `dist/manifest.json` from `about:debugging#/runtime/this-firefox`.
 
+Do not load `public/manifest.json`; `public/` only contains static source assets, while the runnable extension pages and background script are generated into `dist/`.
+
 Temporary installations are removed when the development browser profile is reset or the add-on is unloaded.
 
 ## Persistent Installation
 
-Persistent installation in regular Firefox requires a signed extension package. Firefox release and beta builds require Mozilla signing for extensions.
+The recommended persistent installation path for normal users is the Mozilla Add-ons listing above.
 
-Current stable path:
+Maintainers can also create signed release packages. Firefox release and beta builds require Mozilla signing for extensions.
+
+Maintainer signing path:
 
 ```sh
 npm run release:prepare
@@ -27,7 +43,7 @@ npm run sign:firefox
 
 `npm run sign:firefox` requires Mozilla Add-ons credentials in the environment. Keep those credentials out of git.
 
-After signing, install the signed `.xpi` in Firefox. A persistent installation keeps the extension installed across Firefox restarts and lets the background bootstrap run whenever Firefox opens.
+After signing, install the signed `.xpi` in Firefox or publish it through AMO. A persistent installation keeps the extension installed across Firefox restarts and lets the background bootstrap run whenever Firefox opens.
 
 ## Extension ID
 
@@ -36,7 +52,7 @@ The manifest currently sets:
 ```json
 "browser_specific_settings": {
   "gecko": {
-    "id": "0wl@example.local"
+    "id": "0wl@princengare.github.io"
   }
 }
 ```

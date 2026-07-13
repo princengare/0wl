@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>0wl development</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/w0wltb-32.png" />
+    <link rel="apple-touch-icon" href="assets/w0wltb-128.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="frame">
+        <header class="header">
+          <a class="brand" href="index.html"><img src="assets/w0wltb-48.png" alt="" />0wl</a>
+          <nav class="links" aria-label="Documentation">
+            <a class="button" href="firefox-installation.html">install</a>
+            <a class="button" href="data-migration.html">data</a>
+            <a class="button" href="release/process.html">release</a>
+          </nav>
+        </header>
+
+        <section class="section hero">
+          <h1>development workflow</h1>
+          <p class="summary">
+            Build and reload the Firefox extension locally without using a backend, localhost
+            service, cloud account, or external API.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>one command</h2>
+          <pre><code>npm run firefox:dev</code></pre>
+          <p>
+            This command runs an initial build, starts TypeScript watch, starts Vite watch, waits
+            for the first watched build, then launches Firefox through Mozilla web-ext.
+          </p>
+          <p class="muted">
+            Watch builds keep existing files in dist so Firefox does not reload a half-empty
+            extension folder.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>manual loop</h2>
+          <pre><code>npm run build
+npm run firefox</code></pre>
+          <p>
+            Manual loading should always use <code>dist/manifest.json</code>, not
+            <code>public/manifest.json</code>.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>data safety</h2>
+          <ul>
+            <li>Use the dedicated <code>.web-ext-profile/</code> profile for development.</li>
+            <li>
+              Do not commit profile data, IndexedDB snapshots, local exports, or signing secrets.
+            </li>
+            <li>
+              Build output can be recreated; extension storage should be treated as user data.
+            </li>
+          </ul>
+        </section>
+
+        <footer class="footer">
+          <a class="button" href="index.html">home</a>
+        </footer>
+      </div>
+    </main>
+  </body>
+</html>

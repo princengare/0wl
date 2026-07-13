@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>0wl release process</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="../assets/w0wltb-32.png" />
+    <link rel="apple-touch-icon" href="../assets/w0wltb-128.png" />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="frame">
+        <header class="header">
+          <a class="brand" href="../index.html"><img src="../assets/w0wltb-48.png" alt="" />0wl</a>
+          <nav class="links" aria-label="Documentation">
+            <a class="button" href="../firefox-installation.html">install</a>
+            <a class="button" href="../development.html">develop</a>
+            <a class="button" href="automatic-updates.html">updates</a>
+          </nav>
+        </header>
+
+        <section class="section hero">
+          <h1>release process</h1>
+          <p class="summary">
+            Prepare signed Firefox builds with repeatable checks, stable IDs, and protected local
+            data. Version 0.1.2 is approved and listed on Mozilla Add-ons.
+          </p>
+          <div class="actions">
+            <a class="button" href="https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/"
+              >current firefox add-ons listing</a
+            >
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>current public release</h2>
+          <div class="terminal-grid">
+            <span>version</span>
+            <span>0.1.2</span>
+            <span>status</span>
+            <span>approved on AMO</span>
+            <span>distribution</span>
+            <span>Firefox Add-ons</span>
+          </div>
+        </section>
+
+        <section class="section stack">
+          <h2>release checklist</h2>
+          <ol>
+            <li>
+              Update <code>package.json</code> and <code>public/manifest.json</code> to the same
+              version.
+            </li>
+            <li>Update <code>CHANGELOG.md</code>.</li>
+            <li>Run <code>npm run release:prepare</code>.</li>
+            <li>Review the artifact in <code>web-ext-artifacts/</code>.</li>
+            <li>Sign the extension with <code>npm run sign:firefox</code>.</li>
+            <li>Publish through AMO or host the signed self-distributed XPI.</li>
+          </ol>
+        </section>
+
+        <section class="section stack">
+          <h2>commands</h2>
+          <pre><code>npm run release:check
+npm run release:prepare
+npm run package
+npm run sign:firefox</code></pre>
+        </section>
+
+        <section class="section">
+          <h2>channels</h2>
+          <div class="terminal-grid">
+            <span>development</span>
+            <span>temporary profile, reloads</span>
+            <span>stable</span>
+            <span>signed XPI, persistent data</span>
+            <span>updates</span>
+            <span>AMO or HTTPS update manifest</span>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <a class="button" href="../index.html">home</a>
+        </footer>
+      </div>
+    </main>
+  </body>
+</html>

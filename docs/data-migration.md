@@ -29,6 +29,8 @@ Current protections:
 
 - creates default settings when none exist
 - repairs legacy schema-1 settings that predate time limits
+- migrates existing blocked sites to `Always active` schedules
+- migrates existing time limits to `Always active` schedules
 - normalizes stored domains
 - removes malformed blocked-domain and time-limit rows
 - clears invalid idle-threshold values back to the default
@@ -58,5 +60,6 @@ On update or reload:
 - invalidate stale active runtime sessions
 - re-read current browser state
 - rebuild dynamic blocking and time-limit rules
+- reschedule block and time-limit alarms from saved settings
 - validate settings before use
 - start a new eligible session from the current timestamp only

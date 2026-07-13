@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { tryNormalizeDomain } from "@/shared/domain";
 import { sendMessage } from "@/shared/messagingClient";
-import { formatDuration } from "@/shared/time";
+import { formatDurationHuman, formatDurationMinutes } from "@/shared/time";
 import { isTrackableUrl } from "@/shared/url";
 import type { TimeLimitStatus } from "@/shared/types";
 import "@/styles/terminal.css";
@@ -72,7 +72,8 @@ function LimitPage(): React.JSX.Element {
           <p>You reached the daily limit for this website.</p>
           {status ? (
             <p>
-              Used {formatDuration(status.usedMs)} of {status.limitMinutes}m today
+              Used {formatDurationHuman(status.usedMs)} of{" "}
+              {formatDurationMinutes(status.limitMinutes)} today
             </p>
           ) : null}
           <div className="terminal-actions">

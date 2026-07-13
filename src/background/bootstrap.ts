@@ -38,6 +38,7 @@ const timeLimitManager = new TimeLimitManager({
   settingsStore,
   runtimeStateStore,
   dailyUsageRepository,
+  sessionRepository,
   timeLimitRuleManager
 });
 const lifecycleManager = new ExtensionLifecycleManager({
@@ -69,7 +70,7 @@ async function initializeCore(): Promise<void> {
   const settingsMigration = await settingsStore.migrateStoredSettings();
   const settings = settingsMigration.settings;
   browser.idle.setDetectionInterval(settings.idleThresholdSeconds);
-  await blockRuleManager.syncDynamicRules(settings.blockedDomains);
+  await blockRuleManager.refreshDynamicRules(settings.blockedDomains);
   await timeLimitManager.refresh();
 
   if (settingsMigration.changed) {

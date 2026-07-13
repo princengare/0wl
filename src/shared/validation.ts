@@ -17,8 +17,16 @@ export function isValidTimeLimitMinutes(value: unknown): value is number {
     value === 10 ||
     value === 15 ||
     value === 30 ||
+    value === 45 ||
     value === 60 ||
-    value === 120
+    value === 90 ||
+    value === 120 ||
+    value === 150 ||
+    value === 180 ||
+    value === 210 ||
+    value === 240 ||
+    value === 270 ||
+    value === 300
   );
 }
 

@@ -14,6 +14,7 @@ export const TIME_LIMIT_RULE_ID_SPAN = 400_000_000;
 export const BLOCKED_PAGE_PATH = "blocked/index.html";
 export const TIME_LIMIT_PAGE_PATH = "limit/index.html";
 export const TIME_LIMIT_ALARM_NAME = "active-time-limit-check";
+export const BLOCK_RULE_ALARM_NAME = "scheduled-block-rule-check";
 export const TIME_LIMIT_BYPASS_DURATION_MS = 15 * 60 * 1000;
 
 export const DEFAULT_IDLE_THRESHOLD_SECONDS = 60;

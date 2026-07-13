@@ -7,7 +7,8 @@ import {
 } from "@/background/timeLimits/TimeLimitRuleBuilder";
 import { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import { SettingsStore } from "@/storage/SettingsStore";
-import type { DailyUsage } from "@/shared/types";
+import { WEEKDAYS, WEEKENDS } from "@/shared/schedule";
+import type { DailyUsage, ScheduleConfig, UsageSession } from "@/shared/types";
 import { MemoryStorageArea } from "./helpers/memoryStorage";
 
 const TEST_NOW = new Date(2026, 6, 6, 12, 0, 0).getTime();
@@ -55,7 +56,21 @@ function makeBrowserMock() {
   };
 }
 
-function createManager(rows: DailyUsage[], now = TEST_NOW) {
+function createSession(domain: string, startedAt: number, endedAt: number): UsageSession {
+  return {
+    id: `${domain}-${startedAt}`,
+    domain,
+    startedAt,
+    endedAt,
+    durationMs: endedAt - startedAt,
+    startReason: "startup",
+    endReason: "navigation",
+    dateKey: TEST_DATE_KEY,
+    createdAt: endedAt
+  };
+}
+
+function createManager(rows: DailyUsage[], now = TEST_NOW, sessions: UsageSession[] = []) {
   const storage = new MemoryStorageArea() as unknown as browser.storage.StorageArea;
   const settingsStore = new SettingsStore(storage);
   const runtimeStateStore = new RuntimeStateStore(storage);
@@ -67,6 +82,11 @@ function createManager(rows: DailyUsage[], now = TEST_NOW) {
     dailyUsageRepository: {
       listByDate: vi.fn(async () => rows)
     } as unknown as ConstructorParameters<typeof TimeLimitManager>[0]["dailyUsageRepository"],
+    sessionRepository: {
+      getOverlapping: vi.fn(async (start: number, end: number) =>
+        sessions.filter((session) => session.endedAt > start && session.startedAt < end)
+      )
+    } as unknown as ConstructorParameters<typeof TimeLimitManager>[0]["sessionRepository"],
     now: () => now
   });
 
@@ -95,6 +115,32 @@ describe("time limits", () => {
     await expect(settingsStore.addTimeLimitedDomain("m.instagram.com", 30, 2)).rejects.toThrow(
       "already has a time limit"
     );
+  });
+
+  it("edits time-limited domains and rejects duplicate edits", async () => {
+    const storage = new MemoryStorageArea() as unknown as browser.storage.StorageArea;
+    const settingsStore = new SettingsStore(storage);
+
+    const limited = await settingsStore.addTimeLimitedDomain("instagram.com", 30, 1);
+    await settingsStore.addTimeLimitedDomain("reddit.com", 30, 2);
+    await settingsStore.updateTimeLimitedDomain(
+      limited.id,
+      45,
+      { mode: "always" },
+      3,
+      "https://www.youtube.com/watch?v=123"
+    );
+
+    const settings = await settingsStore.get(4);
+    expect(settings.timeLimitedDomains.find((row) => row.id === limited.id)).toMatchObject({
+      domain: "youtube.com",
+      limitMinutes: 45,
+      bypassUntil: null
+    });
+
+    await expect(
+      settingsStore.updateTimeLimitedDomain(limited.id, 45, { mode: "always" }, 5, "reddit.com")
+    ).rejects.toThrow("already has a time limit");
   });
 
   it("builds stable main-frame redirect rules", () => {
@@ -173,5 +219,96 @@ describe("time limits", () => {
         url: expect.stringContaining("limit/index.html")
       })
     );
+  });
+
+  it("enforces scheduled limits inside the active window", async () => {
+    const browserMock = makeBrowserMock();
+    const schedule: ScheduleConfig = {
+      mode: "custom",
+      daysOfWeek: WEEKDAYS,
+      startMinutes: 9 * 60,
+      endMinutes: 17 * 60
+    };
+    const { manager, settingsStore } = createManager([], TEST_NOW, [
+      createSession(
+        "instagram.com",
+        new Date(2026, 6, 6, 10, 0).getTime(),
+        new Date(2026, 6, 6, 10, 1).getTime()
+      )
+    ]);
+    await settingsStore.addTimeLimitedDomain("instagram.com", 1, 1, schedule);
+
+    await manager.refresh();
+
+    expect(browserMock.rules).toHaveLength(1);
+  });
+
+  it("does not enforce scheduled limits outside the active window", async () => {
+    const browserMock = makeBrowserMock();
+    const now = new Date(2026, 6, 6, 18, 0).getTime();
+    const schedule: ScheduleConfig = {
+      mode: "custom",
+      daysOfWeek: WEEKDAYS,
+      startMinutes: 9 * 60,
+      endMinutes: 17 * 60
+    };
+    const { manager, settingsStore } = createManager([], now, [
+      createSession(
+        "instagram.com",
+        new Date(2026, 6, 6, 10, 0).getTime(),
+        new Date(2026, 6, 6, 10, 10).getTime()
+      )
+    ]);
+    await settingsStore.addTimeLimitedDomain("instagram.com", 1, 1, schedule);
+
+    await manager.refresh();
+
+    expect(browserMock.rules).toHaveLength(0);
+  });
+
+  it("supports weekend-only scheduled limits", async () => {
+    const browserMock = makeBrowserMock();
+    const now = new Date(2026, 6, 11, 12, 0).getTime();
+    const schedule: ScheduleConfig = {
+      mode: "custom",
+      daysOfWeek: WEEKENDS,
+      startMinutes: 9 * 60,
+      endMinutes: 17 * 60
+    };
+    const { manager, settingsStore } = createManager([], now, [
+      createSession(
+        "reddit.com",
+        new Date(2026, 6, 11, 10, 0).getTime(),
+        new Date(2026, 6, 11, 10, 1).getTime()
+      )
+    ]);
+    await settingsStore.addTimeLimitedDomain("reddit.com", 1, 1, schedule);
+
+    await manager.refresh();
+
+    expect(browserMock.rules).toHaveLength(1);
+  });
+
+  it("counts only the scheduled overlap for midnight-crossing limits", async () => {
+    const browserMock = makeBrowserMock();
+    const now = new Date(2026, 6, 7, 1, 30).getTime();
+    const schedule: ScheduleConfig = {
+      mode: "custom",
+      daysOfWeek: [1],
+      startMinutes: 22 * 60,
+      endMinutes: 2 * 60
+    };
+    const { manager, settingsStore } = createManager([], now, [
+      createSession(
+        "youtube.com",
+        new Date(2026, 6, 6, 21, 50).getTime(),
+        new Date(2026, 6, 7, 0, 20).getTime()
+      )
+    ]);
+    await settingsStore.addTimeLimitedDomain("youtube.com", 15, 1, schedule);
+
+    await manager.refresh();
+
+    expect(browserMock.rules).toHaveLength(1);
   });
 });
