@@ -1,5 +1,7 @@
 import { buildDynamicBlockRule, isManagedRuleId } from "./DynamicRuleBuilder";
 import { BLOCK_RULE_ALARM_NAME } from "@/shared/constants";
+import { clearAlarm, createAlarm } from "@/platform/alarmsApi";
+import { getDynamicRules, updateDynamicRules } from "@/platform/dynamicRulesApi";
 import { isScheduleActive, nextScheduleTransition } from "@/shared/schedule";
 import type { BlockedDomain } from "@/shared/types";
 
@@ -9,12 +11,12 @@ export class BlockRuleManager {
       .filter((blocked) => blocked.enabled && isScheduleActive(blocked.schedule, now))
       .map((blocked) => blocked.domain);
     const desiredRules = enabledDomains.map((domain) => buildDynamicBlockRule(domain));
-    const existingRules = await browser.declarativeNetRequest.getDynamicRules();
+    const existingRules = await getDynamicRules();
     const managedRuleIds = existingRules
       .map((rule) => rule.id)
       .filter((ruleId) => isManagedRuleId(ruleId));
 
-    await browser.declarativeNetRequest.updateDynamicRules({
+    await updateDynamicRules({
       removeRuleIds: managedRuleIds,
       addRules: desiredRules
     });
@@ -26,7 +28,7 @@ export class BlockRuleManager {
   }
 
   async scheduleNextAlarm(blockedDomains: BlockedDomain[], now = Date.now()): Promise<void> {
-    await browser.alarms.clear(BLOCK_RULE_ALARM_NAME);
+    await clearAlarm(BLOCK_RULE_ALARM_NAME);
 
     const nextAlarmAt = blockedDomains
       .filter((blocked) => blocked.enabled)
@@ -35,7 +37,7 @@ export class BlockRuleManager {
       .sort((a, b) => a - b)[0];
 
     if (nextAlarmAt) {
-      browser.alarms.create(BLOCK_RULE_ALARM_NAME, { when: nextAlarmAt });
+      createAlarm(BLOCK_RULE_ALARM_NAME, { when: nextAlarmAt });
     }
   }
 }

@@ -1,3 +1,10 @@
+import type {
+  BrowsingIntentOutcome,
+  DomainCategory,
+  FrictionLevel,
+  VisionSettings
+} from "@/vision/types";
+
 export type StartReason =
   "startup" | "tab-activated" | "navigation" | "window-focused" | "idle-resumed";
 
@@ -212,6 +219,31 @@ export type MessageRequest =
     }
   | { type: "GET_TIME_LIMIT_STATUS"; domain: string }
   | { type: "BYPASS_TIME_LIMIT"; domain: string }
+  | { type: "GET_VISION_REPORT" }
+  | {
+      type: "SET_DOMAIN_CLASSIFICATION";
+      domain: string;
+      primaryCategory: DomainCategory;
+      secondaryCategories?: DomainCategory[];
+    }
+  | { type: "RESET_DOMAIN_CLASSIFICATION"; domain: string }
+  | { type: "UPDATE_VISION_SETTINGS"; changes: Partial<VisionSettings> }
+  | { type: "DISMISS_VISION_RECOMMENDATION"; id: string }
+  | { type: "APPLY_VISION_RECOMMENDATION"; id: string }
+  | {
+      type: "UPSERT_FRICTION_RULE";
+      domain: string;
+      level: FrictionLevel;
+      schedule?: ScheduleConfig;
+      enabled?: boolean;
+    }
+  | { type: "REMOVE_FRICTION_RULE"; id: string }
+  | {
+      type: "RECORD_BROWSING_INTENT";
+      domain: string;
+      intent: string;
+      outcome: BrowsingIntentOutcome;
+    }
   | { type: "GET_RUNTIME_STATE" }
   | { type: "GET_BLOCKED_ATTEMPT_COUNT"; domain: string }
   | { type: "RECORD_BLOCK_ATTEMPT"; domain: string };

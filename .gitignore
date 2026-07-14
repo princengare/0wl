@@ -1,5 +1,7 @@
 node_modules/
 dist/
+.output/
+.wxt/
 web-ext-artifacts/
 coverage/
 .DS_Store
@@ -9,21 +11,34 @@ coverage/
 .env
 .env.*
 !.env.example
+.envrc
+*.local
 web-ext-config.js
 .web-ext-config.js
 *.pem
 *.key
 *.p12
 *.crt
+*.cer
+*.p8
+*.mobileprovision
+*.provisionprofile
 
 # Local Firefox/browser profiles and extension runtime data
 /profile/
 /profiles/
 /firefox-profile/
+/chrome-profile/
+/edge-profile/
+/opera-profile/
+/browser-profile/
+/browser-profiles/
 /web-ext-profile/
 /.web-ext-profile/
 /IndexedDB/
 /browser-extension-data/
+/Local Storage/
+/Session Storage/
 /storage/
 /idb/
 *.sqlite
@@ -33,8 +48,12 @@ web-ext-config.js
 
 # Local exports may contain browsing history or blocked-site data
 /exports/
+/backup/
+/backups/
 /local-data/
 /user-data/
+/0wl-backup-*.json
+/*-backup-*.json
 *.csv
 *.tsv
 
@@ -42,3 +61,14 @@ web-ext-config.js
 .cache/
 .vite/
 *.xpi
+*.crx
+*.zip
+
+# Safari/Xcode local user state
+platforms/safari/xcode/
+platforms/safari/xcode/**/xcuserdata/
+platforms/safari/xcode/**/*.xcuserdatad/
+platforms/safari/xcode/**/DerivedData/
+platforms/safari/xcode/**/*.xcarchive/
+platforms/safari/xcode/**/*.xcuserstate
+platforms/safari/xcode/**/*.xcscmblueprint

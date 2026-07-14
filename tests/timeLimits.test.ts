@@ -216,7 +216,7 @@ describe("time limits", () => {
     expect(browserMock.tabsUpdate).toHaveBeenCalledWith(
       7,
       expect.objectContaining({
-        url: expect.stringContaining("limit/index.html")
+        url: expect.stringContaining("limit.html")
       })
     );
   });

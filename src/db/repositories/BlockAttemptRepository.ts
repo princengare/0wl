@@ -41,4 +41,12 @@ export class BlockAttemptRepository {
     await transactionDone(transaction);
     return attempts.reduce((sum, attempt) => sum + attempt.count, 0);
   }
+
+  async listAll(): Promise<BlockAttempt[]> {
+    const db = await openDatabase();
+    const transaction = db.transaction(STORE_BLOCK_ATTEMPTS, "readonly");
+    const attempts = await requestToPromise(transaction.objectStore(STORE_BLOCK_ATTEMPTS).getAll());
+    await transactionDone(transaction);
+    return attempts.sort((a, b) => a.attemptedAt - b.attemptedAt);
+  }
 }

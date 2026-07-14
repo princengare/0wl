@@ -26,16 +26,58 @@
         <section class="section hero" aria-labelledby="title">
           <h1 id="title">local-first website focus tracker</h1>
           <p class="summary">
-            0wl is a standalone Firefox WebExtension for tracking active website time, blocking
+            0wl is a standalone local-first extension for tracking active website time, blocking
             distracting domains, scheduling blocks and limits, and reviewing terminal-style history
-            charts. Version 0.1.2 is approved and listed on Mozilla Add-ons. No accounts. No
-            backend. No cloud sync.
+            charts, local behavioral insights, and scheduled friction. Version 0.1.3 adds the first
+            local Vision layer, WXT builds for Firefox, Chrome, Edge, Opera, and Safari assets, and
+            UI changes that make the extension more consistent with the 0wl aesthetic from one
+            shared codebase. No accounts. No backend. No cloud sync.
           </p>
           <div class="actions">
             <a class="button" href="https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/"
               >install from firefox add-ons</a
             >
-            <span class="muted">current approved release: 0.1.2</span>
+            <span class="muted">current codebase release: 0.1.3</span>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="latest-title">
+          <h2 id="latest-title">0wl aesthetic note</h2>
+          <div class="cards">
+            <div class="card">
+              <span>terminal dropdowns</span>
+              <span class="muted"
+                >Custom black-and-white dropdown menus replace native select controls across the
+                dashboard.</span
+              >
+            </div>
+            <div class="card">
+              <span>bracket checkboxes</span>
+              <span class="muted"
+                >Checkboxes now use <code>[ ]</code> and <code>[✓]</code> states with underline
+                hover and focus feedback.</span
+              >
+            </div>
+            <div class="card">
+              <span>bundled font</span>
+              <span class="muted"
+                >Extension pages and this site use bundled JetBrains Mono with <code>ss02</code>,
+                <code>cv03</code>, and slashed-zero features.</span
+              >
+            </div>
+            <div class="card">
+              <span>dashboard consistency</span>
+              <span class="muted"
+                >Header tabs stay on one line, Settings uses the gear control, and Vision section
+                titles are denser.</span
+              >
+            </div>
+            <div class="card">
+              <span>history alignment</span>
+              <span class="muted"
+                >The weekly average line now sits at the computed chart value.</span
+              >
+            </div>
           </div>
         </section>
 
@@ -57,6 +99,13 @@
               >
             </div>
             <div class="card">
+              <span>terminal ui controls</span>
+              <span class="muted"
+                >Custom dropdowns, bracket checkboxes, one-line dashboard tabs, and bundled
+                JetBrains Mono keep the UI consistent.</span
+              >
+            </div>
+            <div class="card">
               <span>scheduled blocking</span>
               <span class="muted"
                 >Block websites always or only on selected local days and times, including overnight
@@ -71,6 +120,13 @@
               >
             </div>
             <div class="card">
+              <span>vision insights</span>
+              <span class="muted"
+                >Local site categories, transitions, distraction pathways, recovery estimates, block
+                outcomes, and recommendations.</span
+              >
+            </div>
+            <div class="card">
               <span>local storage</span>
               <span class="muted"
                 >Uses IndexedDB and browser.storage.local. No telemetry, accounts, or cloud
@@ -78,13 +134,38 @@
               >
             </div>
             <div class="card">
-              <span>firefox-first</span>
+              <span>browser-specific builds</span>
               <span class="muted"
-                >Built for Manifest V3 Firefox WebExtensions with web-ext validation and signing
-                flow.</span
+                >WXT builds Firefox, Chrome, Edge, Opera, and Safari web-extension assets from the
+                shared source tree.</span
               >
             </div>
           </div>
+        </section>
+
+        <section class="section" aria-labelledby="roadmap-title">
+          <h2 id="roadmap-title">Roadmap note</h2>
+          <p class="summary">
+            0wl should eventually separate browser activity into attention buckets instead of
+            treating everything as the same browsing time.
+          </p>
+          <div class="terminal-grid">
+            <span>active browsing</span>
+            <span>main focused HTTP/HTTPS tab while the user is active</span>
+            <span>PiP media</span>
+            <span>Picture-in-Picture media tracked separately from active browsing</span>
+            <span>background media</span>
+            <span>audio or video playing from non-active tabs</span>
+            <span>idle visible</span>
+            <span>visible page time while the user is idle</span>
+            <span>browser unfocused</span>
+            <span>browser pages open while another app has attention</span>
+          </div>
+          <p class="muted">
+            Default direction: track PiP and background media separately, do not count them toward
+            active browsing by default, and let users decide whether media exposure counts toward
+            site limits.
+          </p>
         </section>
 
         <section class="section" aria-labelledby="status-title">
@@ -100,8 +181,16 @@
             <span>scheduled</span>
             <span>history charts</span>
             <span>ready</span>
+            <span>terminal controls</span>
+            <span>custom dropdowns and bracket checkboxes</span>
+            <span>bundled font</span>
+            <span>JetBrains Mono ss02 cv03 zero</span>
             <span>AMO release</span>
-            <span>approved 0.1.2</span>
+            <span>approved 0.1.2 / next 0.1.3</span>
+            <span>vision insights</span>
+            <span>local 0.1.3</span>
+            <span>WXT builds</span>
+            <span>firefox chrome edge opera safari</span>
           </div>
         </section>
 
@@ -117,7 +206,14 @@
             <a class="card" href="development.html">
               <span>development</span>
               <span class="muted"
-                >One-command Firefox reload workflow with a dedicated local profile.</span
+                >WXT dev workflows for Firefox, Chrome, Safari assets, and packaged browser
+                builds.</span
+              >
+            </a>
+            <a class="card" href="safari.html">
+              <span>safari</span>
+              <span class="muted"
+                >Safari asset build, Xcode wrapper, signing, and manual testing notes.</span
               >
             </a>
             <a class="card" href="data-migration.html">
@@ -141,13 +237,19 @@
           <h2 id="commands-title">Commands</h2>
           <div class="prompt">
             <code>npm install</code>
-            <code>npm run firefox:dev</code>
+            <code>npm run dev:firefox</code>
+            <code>npm run dev:chrome</code>
+            <code>npm run build:safari</code>
+            <code>npm run safari:convert</code>
+            <code>npm run build:all</code>
             <code>npm run release:prepare</code>
           </div>
         </section>
 
         <footer class="footer">
-          <p class="muted">Open source, local-first, Firefox-first.</p>
+          <p class="muted">
+            Open source, local-first, Firefox-approved, cross-browser build ready.
+          </p>
         </footer>
       </div>
     </main>

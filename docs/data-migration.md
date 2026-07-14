@@ -9,7 +9,15 @@ Database constants live in `src/shared/constants.ts`.
 Current database:
 
 - name: `focus_tracker`
-- version: `1`
+- version: `2`
+
+Stores:
+
+- `sessions`
+- `daily_usage`
+- `block_attempts`
+- `domain_transitions`
+- `browsing_intents`
 
 Schema creation is centralized in `src/db/database.ts`, and startup opens the database through `src/db/migrations.ts`.
 
@@ -52,6 +60,10 @@ Stored fields include:
 
 It does not store browsing history, visited URLs, page titles, blocked attempts, or domain usage records.
 
+## Browser-Specific Storage
+
+Firefox, Chrome, Edge, Opera, and Safari each keep their own extension storage. Safari data does not automatically import Firefox or Chromium data. 0wl does not add cloud sync or account-based transfer.
+
 ## Update Safety Rules
 
 On update or reload:
@@ -59,7 +71,7 @@ On update or reload:
 - do not count unknown downtime
 - invalidate stale active runtime sessions
 - re-read current browser state
-- rebuild dynamic blocking and time-limit rules
-- reschedule block and time-limit alarms from saved settings
+- rebuild dynamic blocking, time-limit, and friction rules
+- reschedule block, time-limit, and friction alarms from saved settings
 - validate settings before use
 - start a new eligible session from the current timestamp only

@@ -1,4 +1,5 @@
 import { LIFECYCLE_STORAGE_KEY, createDefaultLifecycleState } from "./defaults";
+import { browser as extensionBrowser } from "@/shared/browser";
 import type { ExtensionInstallReason, ExtensionLifecycleState } from "@/shared/types";
 import { isPlainObject } from "@/shared/validation";
 
@@ -57,7 +58,7 @@ function normalizeLifecycleState(value: unknown): ExtensionLifecycleState | null
 }
 
 export class LifecycleStore {
-  constructor(private readonly storageArea: StorageArea = browser.storage.local) {}
+  constructor(private readonly storageArea: StorageArea = extensionBrowser.storage.local) {}
 
   async get(now = Date.now()): Promise<ExtensionLifecycleState> {
     const result = (await this.storageArea.get(LIFECYCLE_STORAGE_KEY)) as Record<string, unknown>;

@@ -23,8 +23,10 @@
         <section class="section hero">
           <h1>release process</h1>
           <p class="summary">
-            Prepare signed Firefox builds with repeatable checks, stable IDs, and protected local
-            data. Version 0.1.2 is approved and listed on Mozilla Add-ons.
+            Prepare signed Firefox builds with repeatable WXT checks, stable IDs, and protected
+            local data. Version 0.1.3 is the current source target with Vision, WXT cross-browser
+            builds, and UI consistency with the 0wl aesthetic; 0.1.2 is approved and listed on
+            Mozilla Add-ons.
           </p>
           <div class="actions">
             <a class="button" href="https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/"
@@ -34,14 +36,20 @@
         </section>
 
         <section class="section">
-          <h2>current public release</h2>
+          <h2>release status</h2>
           <div class="terminal-grid">
-            <span>version</span>
+            <span>source target</span>
+            <span>0.1.3</span>
+            <span>approved version</span>
             <span>0.1.2</span>
             <span>status</span>
             <span>approved on AMO</span>
             <span>distribution</span>
             <span>Firefox Add-ons</span>
+            <span>build system</span>
+            <span>WXT</span>
+            <span>0.1.3 additions</span>
+            <span>Vision / cross-browser builds / 0wl aesthetic consistency</span>
           </div>
         </section>
 
@@ -49,14 +57,18 @@
           <h2>release checklist</h2>
           <ol>
             <li>
-              Update <code>package.json</code> and <code>public/manifest.json</code> to the same
-              version.
+              Update <code>package.json</code> to the new version. WXT generates the extension
+              manifest version from package metadata.
             </li>
             <li>Update <code>CHANGELOG.md</code>.</li>
             <li>Run <code>npm run release:prepare</code>.</li>
-            <li>Review the artifact in <code>web-ext-artifacts/</code>.</li>
+            <li>Review the generated WXT artifact in <code>.output/</code>.</li>
             <li>Sign the extension with <code>npm run sign:firefox</code>.</li>
             <li>Publish through AMO or host the signed self-distributed XPI.</li>
+            <li>
+              For Safari, run <code>npm run safari:convert</code>, then sign/archive the generated
+              app wrapper in Xcode.
+            </li>
           </ol>
         </section>
 
@@ -65,7 +77,12 @@
           <pre><code>npm run release:check
 npm run release:prepare
 npm run package
-npm run sign:firefox</code></pre>
+npm run zip:chrome
+npm run zip:edge
+npm run zip:opera
+npm run sign:firefox
+npm run build:safari
+npm run safari:convert</code></pre>
         </section>
 
         <section class="section">

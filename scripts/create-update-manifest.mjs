@@ -6,13 +6,14 @@ import { basename, resolve } from "node:path";
 
 const root = process.cwd();
 const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
-const manifest = JSON.parse(readFileSync(resolve(root, "public", "manifest.json"), "utf8"));
+const manifestPath = resolve(root, ".output", "firefox-mv3", "manifest.json");
+const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const extensionId = manifest.browser_specific_settings?.gecko?.id;
 const updateBaseUrl = process.env.UPDATE_BASE_URL;
 const xpiFile = process.env.XPI_FILE ?? `0wl-${packageJson.version}.xpi`;
 
 if (!extensionId) {
-  console.error("public/manifest.json must define browser_specific_settings.gecko.id.");
+  console.error(`${manifestPath} must define browser_specific_settings.gecko.id.`);
   process.exit(1);
 }
 

@@ -4,6 +4,7 @@ import {
   createDefaultRuntimeSessionMeta,
   createDefaultRuntimeState
 } from "./defaults";
+import { browser as extensionBrowser } from "@/shared/browser";
 import type { PersistedTrackingState, RuntimeSessionMeta, StartReason } from "@/shared/types";
 import { isPlainObject } from "@/shared/validation";
 
@@ -42,7 +43,7 @@ function isRuntimeSessionMeta(value: unknown): value is RuntimeSessionMeta {
 }
 
 export class RuntimeStateStore {
-  constructor(private readonly storageArea: StorageArea = browser.storage.local) {}
+  constructor(private readonly storageArea: StorageArea = extensionBrowser.storage.local) {}
 
   async get(now = Date.now()): Promise<PersistedTrackingState> {
     const result = (await this.storageArea.get(RUNTIME_STATE_STORAGE_KEY)) as Record<

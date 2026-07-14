@@ -1,4 +1,5 @@
 import type { MessageRequest, MessageResponse } from "./types";
+import { browser } from "./browser";
 
 export async function sendMessage<T>(request: MessageRequest): Promise<T> {
   const response = (await browser.runtime.sendMessage(request)) as MessageResponse<T>;

@@ -32,15 +32,19 @@
           <h2>current storage</h2>
           <div class="terminal-grid">
             <span>IndexedDB</span>
-            <span>focus_tracker v1</span>
+            <span>focus_tracker v2</span>
             <span>sessions</span>
             <span>source of truth</span>
             <span>daily_usage</span>
             <span>aggregate</span>
             <span>block_attempts</span>
             <span>minute buckets</span>
+            <span>domain_transitions</span>
+            <span>vision patterns</span>
+            <span>browsing_intents</span>
+            <span>friction prompts</span>
             <span>browser.storage.local</span>
-            <span>settings/runtime/lifecycle</span>
+            <span>settings/runtime/lifecycle/vision</span>
           </div>
         </section>
 
@@ -49,10 +53,23 @@
           <ul>
             <li>Existing blocked sites migrate to <code>Always active</code>.</li>
             <li>Existing time limits migrate to <code>Always active</code>.</li>
+            <li>
+              Version 2 adds <code>domain_transitions</code> and <code>browsing_intents</code>.
+            </li>
+            <li>Vision settings and category overrides are additive local-storage records.</li>
             <li>Malformed settings are repaired without clearing valid records.</li>
             <li>Stale runtime sessions are invalidated without counting Firefox downtime.</li>
             <li>Dynamic block and time-limit rules are rebuilt from settings on startup.</li>
           </ul>
+        </section>
+
+        <section class="section stack">
+          <h2>browser-specific storage</h2>
+          <p>
+            Firefox, Chrome, Edge, Opera, and Safari each keep separate extension storage. Safari
+            does not automatically import data from another browser. 0wl does not add cloud sync or
+            account-based transfer.
+          </p>
         </section>
 
         <section class="section stack">

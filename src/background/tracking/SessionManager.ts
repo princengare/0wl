@@ -3,6 +3,7 @@ import { getDateKey } from "@/shared/time";
 import type { EndReason, PersistedTrackingState, StartReason, UsageSession } from "@/shared/types";
 import type { DailyUsageRepository } from "@/db/repositories/DailyUsageRepository";
 import type { SessionRepository } from "@/db/repositories/SessionRepository";
+import type { TransitionRecorder } from "@/vision/transitions/TransitionRecorder";
 
 function createSessionId(domain: string, startedAt: number, endedAt: number): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -15,7 +16,8 @@ function createSessionId(domain: string, startedAt: number, endedAt: number): st
 export class SessionManager {
   constructor(
     private readonly sessionRepository: SessionRepository,
-    private readonly dailyUsageRepository: DailyUsageRepository
+    private readonly dailyUsageRepository: DailyUsageRepository,
+    private readonly transitionRecorder?: TransitionRecorder
   ) {}
 
   async closeSession(
@@ -48,6 +50,7 @@ export class SessionManager {
 
     await this.sessionRepository.add(session);
     await this.dailyUsageRepository.addSession(session);
+    await this.transitionRecorder?.recordForSession(session);
     return session;
   }
 }

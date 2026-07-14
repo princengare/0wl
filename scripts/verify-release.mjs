@@ -4,6 +4,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = process.cwd();
+const outputDir = resolve(root, process.env.EXTENSION_OUTPUT_DIR ?? ".output/firefox-mv3");
 const failures = [];
 
 function readJson(path) {
@@ -16,11 +17,11 @@ function assert(condition, message) {
   }
 }
 
-function assertDistPath(path, label) {
-  assert(existsSync(resolve(root, "dist", path)), `${label} is missing from dist: ${path}`);
+function assertOutputPath(path, label) {
+  assert(existsSync(resolve(outputDir, path)), `${label} is missing from ${outputDir}: ${path}`);
 }
 
-function listDistJavaScriptFiles(directory = resolve(root, "dist")) {
+function listOutputJavaScriptFiles(directory = outputDir) {
   if (!existsSync(directory)) {
     return [];
   }
@@ -32,7 +33,7 @@ function listDistJavaScriptFiles(directory = resolve(root, "dist")) {
     const stats = statSync(path);
 
     if (stats.isDirectory()) {
-      paths.push(...listDistJavaScriptFiles(path));
+      paths.push(...listOutputJavaScriptFiles(path));
     } else if (path.endsWith(".js")) {
       paths.push(path);
     }
@@ -42,11 +43,11 @@ function listDistJavaScriptFiles(directory = resolve(root, "dist")) {
 }
 
 const packageJsonPath = resolve(root, "package.json");
-const manifestPath = resolve(root, "dist", "manifest.json");
+const manifestPath = resolve(outputDir, "manifest.json");
 const amoMetadataPath = resolve(root, "amo-metadata.json");
 
 assert(existsSync(packageJsonPath), "package.json is missing.");
-assert(existsSync(manifestPath), "dist/manifest.json is missing. Run npm run build first.");
+assert(existsSync(manifestPath), `${manifestPath} is missing. Run npm run build:firefox first.`);
 
 if (failures.length === 0) {
   const packageJson = readJson(packageJsonPath);
@@ -70,28 +71,36 @@ if (failures.length === 0) {
   );
 
   for (const scriptPath of manifest.background?.scripts ?? []) {
-    assertDistPath(scriptPath, "Background script");
+    assertOutputPath(scriptPath, "Background script");
+  }
+
+  if (manifest.background?.service_worker) {
+    assertOutputPath(manifest.background.service_worker, "Background service worker");
   }
 
   if (manifest.action?.default_popup) {
-    assertDistPath(manifest.action.default_popup, "Action popup");
+    assertOutputPath(manifest.action.default_popup, "Action popup");
   }
 
   if (manifest.options_ui?.page) {
-    assertDistPath(manifest.options_ui.page, "Options page");
+    assertOutputPath(manifest.options_ui.page, "Options page");
+  }
+
+  if (manifest.options_page) {
+    assertOutputPath(manifest.options_page, "Options page");
   }
 
   for (const iconPath of Object.values(manifest.icons ?? {})) {
-    assertDistPath(iconPath, "Extension icon");
+    assertOutputPath(iconPath, "Extension icon");
   }
 
   for (const iconPath of Object.values(manifest.action?.default_icon ?? {})) {
-    assertDistPath(iconPath, "Action icon");
+    assertOutputPath(iconPath, "Action icon");
   }
 
   for (const group of manifest.web_accessible_resources ?? []) {
     for (const resourcePath of group.resources ?? []) {
-      assertDistPath(resourcePath, "Web-accessible resource");
+      assertOutputPath(resourcePath, "Web-accessible resource");
     }
   }
 
@@ -135,7 +144,7 @@ if (failures.length === 0) {
     );
   }
 
-  for (const scriptPath of listDistJavaScriptFiles()) {
+  for (const scriptPath of listOutputJavaScriptFiles()) {
     const script = readFileSync(scriptPath, "utf8");
     assert(
       !/\binnerHTML\s*=/.test(script),

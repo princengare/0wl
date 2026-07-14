@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { browser } from "@/shared/browser";
 import { sendMessage } from "@/shared/messagingClient";
 import { formatDuration } from "@/shared/time";
 import type { TodaySummary } from "@/shared/types";

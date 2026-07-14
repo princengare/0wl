@@ -7,6 +7,13 @@ import type { DailyUsageRepository } from "@/db/repositories/DailyUsageRepositor
 import type { SessionRepository } from "@/db/repositories/SessionRepository";
 import type { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import type { SettingsStore } from "@/storage/SettingsStore";
+import { browser } from "@/shared/browser";
+import { setIdleDetectionInterval } from "@/platform/idleApi";
+import type { DomainClassifier } from "@/vision/classification/DomainClassifier";
+import type { IntentPromptManager } from "@/vision/friction/IntentPromptManager";
+import type { FrictionRuleManager } from "@/vision/friction/FrictionRuleManager";
+import type { VisionSettingsStore } from "@/vision/settings/VisionSettingsStore";
+import type { VisionReportService } from "@/vision/VisionReportService";
 import {
   addLiveDurationToDailyRows,
   getDateKey,
@@ -33,6 +40,11 @@ interface MessageRouterDependencies {
   blockRuleManager: BlockRuleManager;
   timeLimitManager: TimeLimitManager;
   trackingEngine: TrackingEngine;
+  domainClassifier: DomainClassifier;
+  visionSettingsStore: VisionSettingsStore;
+  frictionRuleManager: FrictionRuleManager;
+  intentPromptManager: IntentPromptManager;
+  visionReportService: VisionReportService;
   now?: () => number;
 }
 
@@ -167,7 +179,7 @@ async function syncSettingsSideEffects(
   settings: ExtensionSettings,
   dependencies: MessageRouterDependencies
 ): Promise<void> {
-  browser.idle.setDetectionInterval(settings.idleThresholdSeconds);
+  setIdleDetectionInterval(settings.idleThresholdSeconds);
   await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
   await dependencies.trackingEngine.reconcileTrackingState(
     settings.trackingEnabled ? "settings-changed" : "tracking-disabled"
@@ -311,6 +323,105 @@ async function routeMessage(
 
     case "BYPASS_TIME_LIMIT":
       return ok(await dependencies.timeLimitManager.bypass(message.domain));
+
+    case "GET_VISION_REPORT":
+      return ok(await dependencies.visionReportService.buildReport());
+
+    case "SET_DOMAIN_CLASSIFICATION": {
+      await dependencies.domainClassifier.setUserClassification(
+        message.domain,
+        message.primaryCategory,
+        message.secondaryCategories ?? []
+      );
+      return ok(await dependencies.visionReportService.buildReport());
+    }
+
+    case "RESET_DOMAIN_CLASSIFICATION": {
+      await dependencies.domainClassifier.resetUserClassification(message.domain);
+      return ok(await dependencies.visionReportService.buildReport());
+    }
+
+    case "UPDATE_VISION_SETTINGS": {
+      const settings = await dependencies.visionSettingsStore.update(
+        message.changes,
+        dependencies.now?.() ?? Date.now()
+      );
+      await dependencies.frictionRuleManager.refreshDynamicRules(settings.frictionRules);
+      return ok(settings);
+    }
+
+    case "DISMISS_VISION_RECOMMENDATION": {
+      await dependencies.visionSettingsStore.dismissRecommendation(
+        message.id,
+        dependencies.now?.() ?? Date.now()
+      );
+      return ok(await dependencies.visionReportService.buildReport());
+    }
+
+    case "APPLY_VISION_RECOMMENDATION": {
+      const report = await dependencies.visionReportService.buildReport();
+      const recommendation = report.recommendations.find((row) => row.id === message.id);
+
+      if (!recommendation) {
+        throw new Error("Recommendation is no longer available.");
+      }
+
+      if (recommendation.action.type === "add_block") {
+        await dependencies.settingsStore.addBlockedDomain(
+          recommendation.action.domain,
+          dependencies.now?.() ?? Date.now(),
+          recommendation.action.schedule
+        );
+        const settings = await dependencies.settingsStore.get();
+        await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+      } else if (recommendation.action.type === "add_friction") {
+        const settings = await dependencies.visionSettingsStore.upsertFrictionRule(
+          recommendation.action.domain,
+          recommendation.action.level,
+          recommendation.action.schedule,
+          true,
+          dependencies.now?.() ?? Date.now()
+        );
+        await dependencies.frictionRuleManager.refreshDynamicRules(settings.frictionRules);
+      }
+
+      await dependencies.visionSettingsStore.dismissRecommendation(
+        message.id,
+        dependencies.now?.() ?? Date.now()
+      );
+      return ok(await dependencies.visionReportService.buildReport());
+    }
+
+    case "UPSERT_FRICTION_RULE": {
+      const settings = await dependencies.visionSettingsStore.upsertFrictionRule(
+        message.domain,
+        message.level,
+        message.schedule,
+        message.enabled ?? true,
+        dependencies.now?.() ?? Date.now()
+      );
+      await dependencies.frictionRuleManager.refreshDynamicRules(settings.frictionRules);
+      return ok(await dependencies.visionReportService.buildReport());
+    }
+
+    case "REMOVE_FRICTION_RULE": {
+      const settings = await dependencies.visionSettingsStore.removeFrictionRule(
+        message.id,
+        dependencies.now?.() ?? Date.now()
+      );
+      await dependencies.frictionRuleManager.refreshDynamicRules(settings.frictionRules);
+      return ok(await dependencies.visionReportService.buildReport());
+    }
+
+    case "RECORD_BROWSING_INTENT":
+      return ok(
+        await dependencies.intentPromptManager.record(
+          message.domain,
+          message.intent,
+          message.outcome,
+          dependencies.now?.() ?? Date.now()
+        )
+      );
 
     case "GET_RUNTIME_STATE":
       return ok(await dependencies.runtimeStateStore.get(dependencies.now?.() ?? Date.now()));

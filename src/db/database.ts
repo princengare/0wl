@@ -5,9 +5,15 @@ import {
   INDEX_DATE_KEY,
   INDEX_DOMAIN,
   INDEX_ENDED_AT,
+  INDEX_FROM_DOMAIN,
+  INDEX_OUTCOME,
   INDEX_STARTED_AT,
+  INDEX_TO_DOMAIN,
+  INDEX_TRANSITIONED_AT,
   STORE_BLOCK_ATTEMPTS,
+  STORE_BROWSING_INTENTS,
   STORE_DAILY_USAGE,
+  STORE_DOMAIN_TRANSITIONS,
   STORE_SESSIONS
 } from "./schema";
 
@@ -52,6 +58,23 @@ function createStores(db: IDBDatabase): void {
     attempts.createIndex(INDEX_DOMAIN, "domain", { unique: false });
     attempts.createIndex(INDEX_DATE_KEY, "dateKey", { unique: false });
     attempts.createIndex(INDEX_DATE_DOMAIN, ["dateKey", "domain"], { unique: false });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_DOMAIN_TRANSITIONS)) {
+    const transitions = db.createObjectStore(STORE_DOMAIN_TRANSITIONS, { keyPath: "id" });
+    transitions.createIndex(INDEX_FROM_DOMAIN, "fromDomain", { unique: false });
+    transitions.createIndex(INDEX_TO_DOMAIN, "toDomain", { unique: false });
+    transitions.createIndex(INDEX_TRANSITIONED_AT, "transitionedAt", { unique: false });
+    transitions.createIndex(INDEX_DATE_KEY, "dateKey", { unique: false });
+    transitions.createIndex(INDEX_DATE_DOMAIN, ["dateKey", "toDomain"], { unique: false });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_BROWSING_INTENTS)) {
+    const intents = db.createObjectStore(STORE_BROWSING_INTENTS, { keyPath: "id" });
+    intents.createIndex(INDEX_DOMAIN, "domain", { unique: false });
+    intents.createIndex(INDEX_STARTED_AT, "startedAt", { unique: false });
+    intents.createIndex(INDEX_OUTCOME, "outcome", { unique: false });
+    intents.createIndex(INDEX_DATE_KEY, "dateKey", { unique: false });
   }
 }
 

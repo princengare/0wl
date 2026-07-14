@@ -1,4 +1,6 @@
+import type { Browser } from "wxt/browser";
 import { BLOCKED_PAGE_PATH, MANAGED_RULE_ID_MIN, MANAGED_RULE_ID_SPAN } from "@/shared/constants";
+import { browser as extensionBrowser } from "@/shared/browser";
 
 export function stableRuleIdForDomain(
   domain: string,
@@ -20,12 +22,14 @@ export function isManagedRuleId(ruleId: number): boolean {
 }
 
 export function buildBlockedPageUrl(domain: string): string {
-  const url = new URL(browser.runtime.getURL(BLOCKED_PAGE_PATH));
+  const url = new URL(
+    extensionBrowser.runtime.getURL(BLOCKED_PAGE_PATH as Parameters<typeof extensionBrowser.runtime.getURL>[0])
+  );
   url.searchParams.set("domain", domain);
   return url.toString();
 }
 
-export function buildDynamicBlockRule(domain: string): browser.declarativeNetRequest.Rule {
+export function buildDynamicBlockRule(domain: string): Browser.declarativeNetRequest.Rule {
   return {
     id: stableRuleIdForDomain(domain),
     priority: 2,

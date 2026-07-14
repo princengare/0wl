@@ -23,31 +23,71 @@
         <section class="section hero">
           <h1>development workflow</h1>
           <p class="summary">
-            Build and reload the Firefox extension locally without using a backend, localhost
-            service, cloud account, or external API.
+            Build and reload browser-specific WXT targets locally without using a backend, cloud
+            account, or external API.
           </p>
         </section>
 
         <section class="section stack">
           <h2>one command</h2>
-          <pre><code>npm run firefox:dev</code></pre>
+          <pre><code>npm run dev:firefox
+npm run dev:chrome
+npm run dev:safari</code></pre>
           <p>
-            This command runs an initial build, starts TypeScript watch, starts Vite watch, waits
-            for the first watched build, then launches Firefox through Mozilla web-ext.
+            These commands run WXT development builds, launch the selected browser runner, load the
+            extension automatically, and reload after source changes.
           </p>
           <p class="muted">
-            Watch builds keep existing files in dist so Firefox does not reload a half-empty
-            extension folder.
+            WXT writes browser-specific output under <code>.output/</code> and generated type
+            metadata under <code>.wxt/</code>.
           </p>
         </section>
 
         <section class="section stack">
-          <h2>manual loop</h2>
-          <pre><code>npm run build
-npm run firefox</code></pre>
+          <h2>ui style system</h2>
           <p>
-            Manual loading should always use <code>dist/manifest.json</code>, not
-            <code>public/manifest.json</code>.
+            0wl uses a terminal-style black-and-white interface across extension pages and docs.
+          </p>
+          <ul>
+            <li>
+              Use bundled JetBrains Mono with <code>ss02</code>, <code>cv03</code>, and slashed-zero
+              OpenType features.
+            </li>
+            <li>Use bracket checkboxes: <code>[ ]</code> for off and <code>[✓]</code> for on.</li>
+            <li>Underline checkbox rows on hover or keyboard focus.</li>
+            <li>
+              Use custom terminal dropdowns instead of native select controls in the dashboard.
+            </li>
+            <li>
+              Dropdown menus open underneath the field, invert colors on hover/focus/selection, then
+              close after selection.
+            </li>
+            <li>Keep dashboard header tabs on one horizontal line where practical.</li>
+          </ul>
+        </section>
+
+        <section class="section stack">
+          <h2>manual loop</h2>
+          <pre><code>npm run build:firefox
+npm run build:chrome
+npm run build:edge
+npm run build:opera
+npm run build:safari</code></pre>
+          <p>
+            Firefox manual loading should use <code>.output/firefox-mv3/manifest.json</code>.
+            Chromium-family browsers should load the matching unpacked output folder. Safari assets
+            are generated at <code>.output/safari-mv2/</code>.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>safari wrapper</h2>
+          <pre><code>npm run safari:convert
+npm run safari:open</code></pre>
+          <p>
+            Safari testing and distribution require Apple's Safari Web Extension app wrapper. The
+            wrapper is generated under <code>platforms/safari/xcode/</code>. Regenerating it can
+            overwrite generated Xcode resources, so re-check local signing settings.
           </p>
         </section>
 
@@ -61,6 +101,7 @@ npm run firefox</code></pre>
             <li>
               Build output can be recreated; extension storage should be treated as user data.
             </li>
+            <li>Safari uses a separate Xcode wrapper and requires browser-specific testing.</li>
           </ul>
         </section>
 

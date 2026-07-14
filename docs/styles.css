@@ -1,7 +1,46 @@
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-2.304/fonts/webfonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-2.304/fonts/webfonts/JetBrainsMono-Bold.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-2.304/fonts/webfonts/JetBrainsMono-Italic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-2.304/fonts/webfonts/JetBrainsMono-BoldItalic.woff2")
+    format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 700;
+}
+
 :root {
+  --font-terminal:
+    "JetBrains Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-terminal-features: "ss02", "cv03", "zero";
+
   color: #f7f7f7;
   background: #000;
-  font-family: SFMono-Regular, "Cascadia Code", "Liberation Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-terminal);
+  font-feature-settings: var(--font-terminal-features);
+  font-variant-numeric: slashed-zero;
   font-size: 16px;
   line-height: 1.45;
   letter-spacing: 0;
@@ -15,6 +54,9 @@ html,
 body {
   min-height: 100%;
   margin: 0;
+  font-family: var(--font-terminal);
+  font-feature-settings: var(--font-terminal-features);
+  font-variant-numeric: slashed-zero;
 }
 
 body {
@@ -29,6 +71,20 @@ a {
 a:hover,
 a:focus {
   text-decoration: underline;
+}
+
+code,
+pre,
+nav,
+.card,
+table,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-terminal);
+  font-feature-settings: var(--font-terminal-features);
+  font-variant-numeric: slashed-zero;
 }
 
 code,

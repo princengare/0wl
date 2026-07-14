@@ -39,5 +39,5 @@ for (const [command, args, label] of steps) {
 }
 
 console.log("\nRelease preparation finished.");
-console.log("Unsigned artifact is in web-ext-artifacts/.");
+console.log("Unsigned WXT artifact is in .output/.");
 console.log("Use npm run sign:firefox with AMO credentials when you are ready to sign.");

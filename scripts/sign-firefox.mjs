@@ -42,8 +42,10 @@ function loadLocalEnv(path) {
 const localEnv = loadLocalEnv(envPath);
 const env = {
   ...process.env,
-  ...localEnv
+  ...localEnv,
+  NO_UPDATE_NOTIFIER: "1"
 };
+const sourceDir = env.WEB_EXT_SOURCE_DIR || ".output/firefox-mv3";
 
 const channelArgIndex = process.argv.indexOf("--channel");
 const channel =
@@ -61,7 +63,7 @@ const signArgs = [
   "web-ext",
   "sign",
   "--source-dir",
-  "dist",
+  sourceDir,
   "--artifacts-dir",
   "web-ext-artifacts",
   "--channel",

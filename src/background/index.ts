@@ -1,7 +1,9 @@
 import { bootstrap, registerBackgroundListeners } from "./bootstrap";
 
-registerBackgroundListeners();
+export function startBackground(): void {
+  registerBackgroundListeners();
 
-bootstrap("background-wakeup").catch((error) => {
-  console.error("Failed to initialize extension background", error);
-});
+  bootstrap("background-wakeup").catch((error) => {
+    console.error("Failed to initialize extension background", error);
+  });
+}

@@ -5,6 +5,8 @@ import type { SessionRepository } from "@/db/repositories/SessionRepository";
 import type { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import type { SettingsStore } from "@/storage/SettingsStore";
 import { TIME_LIMIT_ALARM_NAME, TIME_LIMIT_BYPASS_DURATION_MS } from "@/shared/constants";
+import { browser } from "@/shared/browser";
+import { clearAlarm, createAlarm } from "@/platform/alarmsApi";
 import { normalizeDomain } from "@/shared/domain";
 import {
   getScheduleIntervalsBetween,
@@ -222,7 +224,7 @@ export class TimeLimitManager {
   }
 
   private async scheduleNextAlarm(settings: ExtensionSettings, now: number): Promise<void> {
-    await browser.alarms.clear(TIME_LIMIT_ALARM_NAME);
+    await clearAlarm(TIME_LIMIT_ALARM_NAME);
 
     const candidates: number[] = [startOfNextLocalDay(now)];
     const runtimeState = await this.dependencies.runtimeStateStore.get(now);
@@ -261,7 +263,7 @@ export class TimeLimitManager {
       .sort((a, b) => a - b)[0];
 
     if (nextAlarmAt) {
-      browser.alarms.create(TIME_LIMIT_ALARM_NAME, { when: nextAlarmAt });
+      createAlarm(TIME_LIMIT_ALARM_NAME, { when: nextAlarmAt });
     }
   }
 }

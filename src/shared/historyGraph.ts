@@ -38,6 +38,12 @@ export interface DailyUsageBucket {
   domains: DomainUsage[];
 }
 
+export const MIN_VISIBLE_HISTORY_BAR_MS = 1000;
+
+export function hasVisibleHistoryBar(durationMs: number): boolean {
+  return durationMs >= MIN_VISIBLE_HISTORY_BAR_MS;
+}
+
 function addDomainUsage(map: Map<string, number>, domain: string, durationMs: number): void {
   if (durationMs <= 0) {
     return;

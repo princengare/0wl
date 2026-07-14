@@ -5,7 +5,16 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist", "node_modules", "web-ext-artifacts", ".web-ext-profile", "web-ext-profile"]
+    ignores: [
+      ".output",
+      ".wxt",
+      "dist",
+      "node_modules",
+      "web-ext-artifacts",
+      ".web-ext-profile",
+      "web-ext-profile",
+      "platforms/safari/xcode"
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

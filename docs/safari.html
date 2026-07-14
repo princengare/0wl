@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>0wl safari</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/w0wltb-32.png" />
+    <link rel="apple-touch-icon" href="assets/w0wltb-128.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="frame">
+        <header class="header">
+          <a class="brand" href="index.html"><img src="assets/w0wltb-48.png" alt="" />0wl</a>
+          <nav class="links" aria-label="Documentation">
+            <a class="button" href="firefox-installation.html">install</a>
+            <a class="button" href="development.html">develop</a>
+            <a class="button" href="release/process.html">release</a>
+          </nav>
+        </header>
+
+        <section class="section hero">
+          <h1>safari support</h1>
+          <p class="summary">
+            0wl now builds Safari web-extension assets through WXT. Safari still requires Apple's
+            Xcode app wrapper for local testing, signing, archiving, and distribution.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>build assets</h2>
+          <pre><code>npm run build:safari</code></pre>
+          <p>
+            Output is generated at <code>.output/safari-mv2/</code>. Safari is intentionally not
+            included in <code>npm run build:all</code> because the final Safari flow requires Xcode.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>xcode wrapper</h2>
+          <pre><code>npm run safari:convert
+npm run safari:open</code></pre>
+          <p>
+            The wrapper is generated under <code>platforms/safari/xcode/</code>. Use Xcode to run
+            the app, enable the extension in Safari, and test the extension manually. Regenerating
+            the wrapper can overwrite generated Xcode resources, so re-check local signing settings.
+          </p>
+        </section>
+
+        <section class="section stack">
+          <h2>known caveats</h2>
+          <ul>
+            <li>
+              Safari extension storage is separate from Firefox, Chrome, Edge, and Opera data.
+            </li>
+            <li>Idle detection is partial and guarded at runtime.</li>
+            <li>Scheduled rules use alarms when Safari exposes the API.</li>
+            <li>
+              Blocking, time-limit, and friction redirects require Safari DNR behavior testing.
+            </li>
+            <li>Manual Safari testing is required before claiming full Safari parity.</li>
+          </ul>
+        </section>
+
+        <section class="section stack">
+          <h2>full notes</h2>
+          <p>
+            See <code>platforms/safari/README.md</code> in the repository for conversion,
+            signing/archive, distribution, and manual test details.
+          </p>
+        </section>
+
+        <footer class="footer">
+          <a class="button" href="index.html">home</a>
+        </footer>
+      </div>
+    </main>
+  </body>
+</html>

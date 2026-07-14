@@ -1,12 +1,26 @@
 # 0wl
 
-0wl is a standalone, local-first Firefox WebExtension for tracking active website usage and blocking distracting sites.
+0wl is a standalone, local-first browser extension for tracking active website usage and blocking distracting sites.
+
+The public stable release is currently Firefox-first and Mozilla-approved. The codebase now uses WXT so Firefox, Chrome, Microsoft Edge, Opera, and Safari web-extension assets can be produced from one shared React/TypeScript source tree.
 
 Project site: https://princengare.github.io/0wl/
 
 Firefox Add-ons listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
 
-Current Mozilla-approved release: `0.1.2`
+Current codebase release: `0.1.3`
+
+Latest Mozilla-approved listing before the 0.1.3 submission: `0.1.2`
+
+0wl aesthetic note:
+
+- Bundled JetBrains Mono is used across extension pages with the `ss01` and slashed-zero OpenType features.
+- Dashboard checkboxes now use the 0wl `[ ]` and `[✓]` terminal style with underline hover/focus feedback.
+- Dashboard dropdowns now use custom black-and-white terminal menus instead of native browser select controls.
+- Dashboard header tabs stay on one horizontal line, with Settings shown as the bracketed gear control.
+- Vision section headings are smaller and denser to match the rest of the dashboard.
+- The History average line alignment was tightened so it sits at the computed chart value.
+- These changes make the UI more consistent with the 0wl aesthetic.
 
 ## Open Source and Repository Safety
 
@@ -38,7 +52,7 @@ Before pushing, run:
 git status --short --ignored
 ```
 
-Ignored entries such as `node_modules/`, `dist/`, `.DS_Store`, Firefox profiles, local exports, and browser storage data should stay out of commits.
+Ignored entries such as `node_modules/`, `dist/`, `.output/`, `.wxt/`, `.DS_Store`, Firefox profiles, local exports, and browser storage data should stay out of commits.
 
 ## Quick Start
 
@@ -52,31 +66,52 @@ For local development, install dependencies:
 npm install
 ```
 
-Build the extension:
+Build the Firefox extension:
 
 ```sh
-npm run build
+npm run build:firefox
 ```
 
-Run it in Firefox with Mozilla `web-ext`:
+Run it in Firefox with WXT:
 
 ```sh
-npm run firefox
+npm run dev:firefox
 ```
 
-For automatic rebuild and Firefox extension reload during development:
+Run it in Chrome with WXT:
 
 ```sh
-npm run firefox:dev
+npm run dev:chrome
+```
+
+Build Safari web-extension assets:
+
+```sh
+npm run build:safari
 ```
 
 Or load it manually:
 
-1. Run `npm run build`.
+1. Run `npm run build:firefox`.
 2. Open Firefox.
 3. Go to `about:debugging#/runtime/this-firefox`.
 4. Click `Load Temporary Add-on`.
-5. Select `/Users/ngare/Documents/0wl/dist/manifest.json`.
+5. Select `/Users/ngare/Documents/0wl/.output/firefox-mv3/manifest.json`.
+
+For Chromium-family browsers, run the matching build command and load the generated folder as an unpacked extension:
+
+- Chrome: `.output/chrome-mv3/`
+- Microsoft Edge: `.output/edge-mv3/`
+- Opera: `.output/opera-mv3/`
+
+Safari uses a different packaging flow. Build `.output/safari-mv2/`, then generate the Xcode Safari Web Extension wrapper:
+
+```sh
+npm run safari:convert
+npm run safari:open
+```
+
+Safari setup details live in [platforms/safari/README.md](./platforms/safari/README.md).
 
 ## Development and Release Workflow
 
@@ -86,28 +121,47 @@ Detailed guides:
 - [Firefox installation](./docs/firefox-installation.md)
 - [Automatic updates](./docs/release/automatic-updates.md)
 - [Data migration](./docs/data-migration.md)
+- [Safari wrapper](./platforms/safari/README.md)
 - [Release process](./docs/release/process.md)
 
 Useful commands:
 
-| Command                    | Purpose                                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------------------------ |
-| `npm run typecheck`        | Run TypeScript without emitting files.                                                           |
-| `npm run typecheck:watch`  | Watch TypeScript and surface type errors.                                                        |
-| `npm run build`            | Type-check and build the production extension into `dist/`.                                      |
-| `npm run build:watch`      | Rebuild extension assets when source files change.                                               |
-| `npm run firefox`          | Launch Firefox with the built extension from `dist/`.                                            |
-| `npm run firefox:dev`      | Build, watch, wait for the first watched build, launch Firefox, and reload after source changes. |
-| `npm run test`             | Run all Vitest tests.                                                                            |
-| `npm run lint`             | Run ESLint.                                                                                      |
-| `npm run web-ext:lint`     | Validate the built extension with Mozilla `web-ext lint`.                                        |
-| `npm run release:check`    | Inspect the built manifest and referenced output files.                                          |
-| `npm run release:prepare`  | Run lint, tests, build, release verification, web-ext lint, and package.                         |
-| `npm run package`          | Build an unsigned package artifact in `web-ext-artifacts/`.                                      |
-| `npm run sign:firefox`     | Sign the built extension through Mozilla Add-ons credentials.                                    |
-| `npm run updates:manifest` | Generate a self-hosted Firefox update manifest from `UPDATE_BASE_URL`.                           |
+| Command                    | Purpose                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| `npm run dev:firefox`      | Run the WXT Firefox development build with extension reload.                                 |
+| `npm run dev:chrome`       | Run the WXT Chrome development build with extension reload.                                  |
+| `npm run dev:safari`       | Run WXT's Safari MV2 compatibility dev build. Final Safari testing still needs Xcode/Safari. |
+| `npm run typecheck`        | Generate WXT types and run TypeScript without emitting files.                                |
+| `npm run typecheck:watch`  | Watch TypeScript and surface type errors.                                                    |
+| `npm run build`            | Alias for the Firefox production build.                                                      |
+| `npm run build:firefox`    | Type-check and build `.output/firefox-mv3/`.                                                 |
+| `npm run build:chrome`     | Type-check and build `.output/chrome-mv3/`.                                                  |
+| `npm run build:edge`       | Type-check and build `.output/edge-mv3/`.                                                    |
+| `npm run build:opera`      | Type-check and build `.output/opera-mv3/`.                                                   |
+| `npm run build:safari`     | Type-check and build `.output/safari-mv2/`.                                                  |
+| `npm run build:all`        | Build Firefox, Chrome, Edge, and Opera targets.                                              |
+| `npm run zip:firefox`      | Package the Firefox build with WXT.                                                          |
+| `npm run zip:chrome`       | Package the Chrome build with WXT.                                                           |
+| `npm run zip:edge`         | Package the Edge build with WXT.                                                             |
+| `npm run zip:opera`        | Package the Opera build with WXT.                                                            |
+| `npm run zip:safari`       | Package the Safari WXT output as a zip artifact.                                             |
+| `npm run safari:convert`   | Build Safari assets and run Apple's Safari Web Extension converter.                          |
+| `npm run safari:rebuild`   | Regenerate an existing Safari Xcode wrapper from current assets.                             |
+| `npm run safari:open`      | Open the generated Safari Xcode project.                                                     |
+| `npm run firefox`          | Alias for `npm run dev:firefox`.                                                             |
+| `npm run firefox:dev`      | Compatibility alias for `npm run dev:firefox`.                                               |
+| `npm run test`             | Run all Vitest tests.                                                                        |
+| `npm run lint`             | Run ESLint.                                                                                  |
+| `npm run web-ext:lint`     | Validate `.output/firefox-mv3/` with Mozilla `web-ext lint`.                                 |
+| `npm run release:check`    | Inspect the Firefox manifest and referenced output files.                                    |
+| `npm run release:prepare`  | Run lint, tests, Firefox build, release verification, lint, and package.                     |
+| `npm run package`          | Alias for `npm run zip:firefox`.                                                             |
+| `npm run sign:firefox`     | Sign `.output/firefox-mv3/` through Mozilla Add-ons credentials.                             |
+| `npm run updates:manifest` | Generate a self-hosted Firefox update manifest from `UPDATE_BASE_URL`.                       |
 
-The public stable release is now listed on Mozilla Add-ons. Persistent self-distributed installs still require a signed `.xpi`, and self-hosted automatic updates require a real HTTPS update manifest URL.
+The public stable release is listed on Mozilla Add-ons. Persistent self-distributed Firefox installs still require a signed `.xpi`, and self-hosted automatic updates require a real HTTPS update manifest URL.
+
+Safari support now has a WXT MV2 compatibility build path and documented Xcode wrapper flow. Safari distribution still requires Apple's Safari Web Extension app wrapper, Xcode signing/archive steps, and manual Safari testing.
 
 ## How To Use It
 
@@ -118,7 +172,7 @@ Tracking starts automatically when the extension starts. You do not need to pres
 0wl only counts usage when all of these are true:
 
 - Tracking is enabled.
-- Firefox has a focused browser window.
+- The browser has a focused window.
 - The active tab is an `http:` or `https:` page.
 - The system is active, not idle or locked.
 - The active page has a valid normalized website domain.
@@ -127,8 +181,8 @@ Tracking starts automatically when the extension starts. You do not need to pres
 
 - You switch active tabs.
 - The active tab navigates to another domain.
-- Firefox loses focus.
-- Firefox regains focus.
+- The browser loses focus.
+- The browser regains focus.
 - The system becomes idle or active again.
 - A tab closes.
 - Tracking is disabled.
@@ -147,15 +201,24 @@ The popup shows:
 
 ### Dashboard
 
-Open the dashboard from the popup with `Open Dashboard`, or through Firefox extension options.
+Open the dashboard from the popup with `Open Dashboard`, or through the browser's extension options.
 
-The dashboard has five sections:
+The dashboard has six sections:
 
 - `Today`
 - `History`
 - `blocked sites`
 - `time limits`
+- `vision`
 - `Settings`
+
+The dashboard uses terminal-style controls throughout:
+
+- Checkboxes render as `[ ]` when off and `[✓]` when on.
+- Checkbox rows underline on hover or keyboard focus.
+- Dropdowns open as black terminal menus underneath the field.
+- Dropdown options invert to black text on a white background on hover, focus, or selection.
+- Selecting a dropdown option closes the menu and updates the displayed value.
 
 ### Today
 
@@ -222,7 +285,7 @@ To block a site:
 - `https://instagram.com/reels/` becomes `instagram.com`
 - `news.bbc.co.uk` becomes `bbc.co.uk`
 
-Blocked domains are enforced immediately through Firefox Manifest V3 `declarativeNetRequest` dynamic rules.
+Blocked domains are enforced immediately through Manifest V3 `declarativeNetRequest` dynamic rules where the browser supports them.
 
 Blocked-site schedules support:
 
@@ -290,7 +353,7 @@ For each time-limited site, you can:
 
 ### Time Limit Page
 
-When a daily time limit is reached, Firefox redirects to the extension-owned time limit page.
+When a daily time limit is reached, the browser redirects to the extension-owned time limit page where redirect rules are supported.
 
 The time limit page shows:
 
@@ -302,9 +365,49 @@ The time limit page shows:
 
 Click `Continue Anyway` to bypass the limit for 15 minutes and return to the site. The background validates that the domain currently has an active time limit before granting the bypass. Return URLs are validated and only used when they belong to the same normalized domain.
 
+### Vision
+
+Use `vision` to review local behavioral patterns and tune site categories.
+
+Version `0.1.3` adds the first local intelligence layer:
+
+- Seed domain categories for focus, coding, school, research, communication, neutral, mixed, entertainment, social, and distraction sites.
+- User category overrides stored locally in `browser.storage.local`.
+- Domain transition summaries recorded from completed sessions.
+- Distraction pathway detection.
+- Pre-distraction context summaries.
+- Recovery-time estimates.
+- Blocked-attempt heatmap data.
+- Block outcome summaries and bounce-back rate.
+- Substitution and net-time-reclaimed estimates.
+- Attempt-chain and block-evasion summaries.
+- Personalized local insights.
+- Local behavior-based recommendations.
+- Scheduled friction rules.
+- Intent prompt records for friction pages.
+
+The `vision` page has four tabs:
+
+- `patterns`: common transitions, distraction pathways, focus interruptions, drift, and evasion.
+- `insights`: trends, pre-distraction context, block outcomes, substitutions, bounce-back, and net reclaimed time.
+- `recommendations`: local recommendations plus adaptive settings and friction rules.
+- `site categories`: seeded and user-edited domain classifications.
+
+All `vision` features are deterministic and local. They do not call external APIs, cloud services, LLMs, or telemetry endpoints.
+
+Friction levels:
+
+- `Off`: no intervention.
+- `Pause`: short delay before continuing.
+- `Intent`: asks why the site is being opened.
+- `Delay`: longer wait before continuing.
+- `Hard stop`: prevents continuation.
+
+Friction rules support the same schedule editor used by blocks and time limits, including weekdays, weekends, custom days, and overnight windows.
+
 ### Blocked Page
 
-When a blocked top-level navigation is attempted, Firefox redirects to the extension-owned blocked page.
+When a blocked top-level navigation is attempted, the browser redirects to the extension-owned blocked page where redirect rules are supported.
 
 The blocked page shows:
 
@@ -331,7 +434,7 @@ Idle threshold options:
 - `2 minutes`
 - `5 minutes`
 
-Changing the idle threshold updates Firefox idle detection immediately.
+Changing the idle threshold updates browser idle detection immediately where the API is supported.
 
 ## Function Reference
 
@@ -339,22 +442,25 @@ Changing the idle threshold updates Firefox idle detection immediately.
 
 | Function                               | Where                    | What it does                                                                                             |
 | -------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Automatic usage tracking               | Background               | Starts tracking eligible active website time when Firefox starts or the background wakes.                |
+| Automatic usage tracking               | Background               | Starts tracking eligible active website time when the browser starts or the background wakes.            |
 | Domain session switching               | Background               | Closes the previous domain session and starts a new one when the active normalized domain changes.       |
 | Same-domain continuity                 | Background               | Keeps one continuous session when navigation stays within the same normalized domain.                    |
-| Firefox focus exclusion                | Background               | Stops timing when Firefox loses focus and starts a new eligible session when Firefox regains focus.      |
+| Browser focus exclusion                | Background               | Stops timing when the browser loses focus and starts a new eligible session when focus returns.          |
 | Idle exclusion                         | Background               | Stops timing when the system becomes idle or locked and resumes from the active timestamp.               |
-| Startup recovery                       | Background               | Invalidates stale runtime tracking state without counting Firefox downtime.                              |
+| Startup recovery                       | Background               | Invalidates stale runtime tracking state without counting browser downtime.                              |
 | Today summary                          | Popup, Dashboard         | Shows total tracked time today and ranked domains.                                                       |
 | Current session display                | Popup                    | Shows the current tracked domain and current-session elapsed time.                                       |
 | History display                        | Dashboard                | Shows session history plus hourly and calendar-week bar charts built from raw sessions.                  |
 | History bar selection                  | Dashboard                | Shows per-site totals for selected non-empty hours or days.                                              |
 | Calendar-week average                  | Dashboard                | Shows average usage for the displayed calendar week, excluding zero-usage days.                          |
+| Terminal checkbox controls             | Dashboard                | Uses bracket-style `[ ]` and `[✓]` controls with underline hover/focus feedback.                         |
+| Terminal dropdown controls             | Dashboard                | Uses custom black-and-white dropdown menus that close after selection.                                   |
+| Bundled terminal font                  | Extension UI, Docs       | Uses bundled JetBrains Mono with `ss01` and slashed-zero OpenType features.                              |
 | Add blocked domain                     | Dashboard                | Normalizes input, rejects duplicates, saves settings, and installs an active dynamic DNR redirect rule.  |
 | Schedule blocked domain                | Dashboard                | Applies blocking always or only during selected local days and times.                                    |
 | Pause/resume blocked domain            | Dashboard                | Enables or disables a saved blocked domain and syncs DNR rules.                                          |
 | Remove blocked domain                  | Dashboard                | Removes the domain from settings and removes its dynamic DNR rule.                                       |
-| Blocked navigation redirect            | Browser/DNR              | Redirects blocked main-frame navigations to `blocked/index.html`.                                        |
+| Blocked navigation redirect            | Browser/DNR              | Redirects blocked main-frame navigations to `blocked.html`.                                              |
 | Block attempt recording                | Blocked page, Background | Validates the blocked domain and records a minute-bucketed local attempt.                                |
 | Block attempt count                    | Blocked page             | Shows today’s count when the setting is enabled.                                                         |
 | Add time-limited domain                | Dashboard                | Normalizes input, rejects duplicates, saves a daily limit, and refreshes enforcement.                    |
@@ -362,17 +468,23 @@ Changing the idle threshold updates Firefox idle detection immediately.
 | Pause/resume time-limited domain       | Dashboard                | Enables or disables a saved time limit and refreshes enforcement.                                        |
 | Update time limit                      | Dashboard                | Changes a saved domain’s daily limit and clears any active bypass.                                       |
 | Remove time-limited domain             | Dashboard                | Removes the saved limit and removes any corresponding DNR rule.                                          |
-| Time-limit redirect                    | Browser/DNR, Background  | Redirects an over-limit main-frame navigation or active tab to `limit/index.html`.                       |
+| Time-limit redirect                    | Browser/DNR, Background  | Redirects an over-limit main-frame navigation or active tab to `limit.html`.                             |
 | Time-limit bypass                      | Limit page, Background   | Validates the domain and bypasses the daily limit for 15 minutes.                                        |
+| Vision report                          | Dashboard                | Builds local transition, pathway, context, recovery, substitution, and recommendation summaries.         |
+| Site categorization                    | Dashboard                | Uses seed classifications and user overrides to classify visited domains locally.                        |
+| Distraction pathway detection          | Dashboard                | Identifies recurring paths from focus activity into distracting sites.                                   |
+| Behavior-based recommendations         | Dashboard                | Suggests local blocks or friction based on repeated patterns.                                            |
+| Scheduled friction rules               | Dashboard, Background    | Applies pause, intent, delay, or hard-stop interventions during selected local schedule windows.         |
+| Intent prompt recording                | Friction page            | Stores local browsing intent outcomes for friction prompts.                                              |
 | Alarm-based schedule enforcement       | Background               | Schedules one-shot wakeups for block transitions, limit windows, bypass expiry, or local midnight.       |
 | Install/update lifecycle recording     | Background               | Records non-sensitive extension version, previous version, install reason, and temporary-install status. |
 | Settings migration                     | Background               | Repairs legacy or malformed local settings before syncing blocking, time-limit, and idle behavior.       |
-| Update-safe recovery                   | Background               | Invalidates stale active sessions on install/update without counting unknown Firefox downtime.           |
+| Update-safe recovery                   | Background               | Invalidates stale active sessions on install/update without counting unknown browser downtime.           |
 | Release verification                   | Developer tooling        | Checks version alignment, Firefox ID, extension name, and manifest-referenced build outputs.             |
 | Automatic development reload           | Developer tooling        | Builds, watches, launches Firefox, and reloads the extension with one command.                           |
 | Self-hosted update manifest generation | Developer tooling        | Creates `web-ext-artifacts/updates.json` for signed self-hosted Firefox releases.                        |
 | Tracking enabled toggle                | Dashboard                | Enables or disables all tracking.                                                                        |
-| Idle threshold selector                | Dashboard                | Updates the Firefox idle detection interval.                                                             |
+| Idle threshold selector                | Dashboard                | Updates the browser idle detection interval where supported.                                             |
 | Attempt-count visibility toggle        | Dashboard                | Shows or hides blocked-attempt counts on the blocked page.                                               |
 
 ### Runtime Messages
@@ -396,6 +508,15 @@ The React pages communicate with the background through typed `browser.runtime.s
 | `UPDATE_TIME_LIMITED_DOMAIN`      | Dashboard               | `ExtensionSettings`      | Updates the daily limit or schedule for a saved domain.                                       |
 | `GET_TIME_LIMIT_STATUS`           | Limit page              | `TimeLimitStatus`        | Returns used time, remaining time, exceeded status, and bypass state.                         |
 | `BYPASS_TIME_LIMIT`               | Limit page              | `TimeLimitStatus`        | Grants a validated 15-minute bypass for an active time-limited domain.                        |
+| `GET_VISION_REPORT`               | Dashboard               | `VisionReport`           | Returns local classification, pattern, insight, recommendation, and friction summaries.       |
+| `SET_DOMAIN_CLASSIFICATION`       | Dashboard               | `VisionReport`           | Saves a local user category override for a normalized domain.                                 |
+| `RESET_DOMAIN_CLASSIFICATION`     | Dashboard               | `VisionReport`           | Removes a user override and falls back to the seed classification when available.             |
+| `UPDATE_VISION_SETTINGS`          | Dashboard               | `VisionSettings`         | Updates adaptive recommendation/enforcement settings.                                         |
+| `DISMISS_VISION_RECOMMENDATION`   | Dashboard               | `VisionReport`           | Locally hides a recommendation.                                                               |
+| `APPLY_VISION_RECOMMENDATION`     | Dashboard               | `VisionReport`           | Applies a local recommended block or friction rule.                                           |
+| `UPSERT_FRICTION_RULE`            | Dashboard               | `VisionReport`           | Creates or updates a scheduled friction rule.                                                 |
+| `REMOVE_FRICTION_RULE`            | Dashboard               | `VisionReport`           | Removes a scheduled friction rule.                                                            |
+| `RECORD_BROWSING_INTENT`          | Friction page           | `BrowsingIntent`         | Records a validated local browsing-intent outcome.                                            |
 | `GET_RUNTIME_STATE`               | Internal/debug use      | `PersistedTrackingState` | Returns current persisted runtime tracking state.                                             |
 | `GET_BLOCKED_ATTEMPT_COUNT`       | Blocked page            | `number`                 | Returns today’s blocked-attempt count for a validated domain.                                 |
 | `RECORD_BLOCK_ATTEMPT`            | Blocked page            | `BlockAttempt`           | Validates the domain is currently blocked and records a local attempt.                        |
@@ -409,7 +530,7 @@ The React pages communicate with the background through typed `browser.runtime.s
 | `tracking`          | A valid active website session is currently open.                  |
 | `inactive`          | Tracking is enabled, but no eligible HTTP/HTTPS website is active. |
 | `idle`              | The system is idle or locked.                                      |
-| `browser-unfocused` | Firefox does not have focus.                                       |
+| `browser-unfocused` | The browser does not have focus.                                   |
 | `disabled`          | Tracking is turned off in settings.                                |
 
 ### Session End Reasons
@@ -439,13 +560,15 @@ Sessions record why they started:
 IndexedDB database:
 
 - Name: `focus_tracker`
-- Version: `1`
+- Version: `2`
 
 Object stores:
 
 - `sessions`: completed usage sessions and the historical source of truth.
 - `daily_usage`: materialized date/domain aggregates for fast dashboard reads.
 - `block_attempts`: local blocked-navigation attempts bucketed by domain and minute.
+- `domain_transitions`: local transitions between completed sessions, used by the `vision` page.
+- `browsing_intents`: local friction/intent prompt records.
 
 `browser.storage.local` stores:
 
@@ -454,6 +577,8 @@ Object stores:
 - Current session start metadata.
 - Extension lifecycle metadata.
 - Time-limit bypass expiration timestamps.
+- Vision settings and scheduled friction rules.
+- User domain category overrides.
 
 ## Privacy
 
@@ -486,6 +611,295 @@ The manifest declares:
 ```
 
 ## Features to Be Added
+
+Note: version `0.1.3` implements the first deterministic, local-only version of the behavioral intelligence features below inside the new `vision` dashboard tab. The roadmap remains here to track future refinement, richer UI, and deeper analysis.
+
+### Attention Bucket Differentiation
+
+0wl should not treat every kind of browser activity as the same kind of browsing time.
+
+The better tracking model is to split browser activity into different attention buckets so the dashboard can distinguish main browser attention from media exposure, idle visibility, and unfocused browser state.
+
+Recommended buckets:
+
+- `active_browsing_time`: main browser attention on the active HTTP/HTTPS tab while the browser is focused and the user is not idle.
+- `pip_media_time`: media playing in Picture-in-Picture while the user is focused somewhere else.
+- `background_media_time`: audio or video playing from a non-active tab.
+- `idle_visible_time`: a page is visible but the user/system is idle.
+- `browser_unfocused_time`: the browser has a page open but the user is working in another app.
+
+Example:
+
+```text
+Active tab: github.com
+Picture-in-Picture: youtube.com
+Duration: 40 min
+
+github.com active browsing time = 40 min
+youtube.com PiP media time = 40 min
+```
+
+Another example:
+
+```text
+Active tab: docs.google.com
+Background audio: spotify.com
+Duration: 50 min
+
+docs.google.com active browsing time = 50 min
+spotify.com background media time = 50 min
+```
+
+Idle behavior should remain separate:
+
+```text
+Visible page: instagram.com
+User idle for: 30 min
+
+instagram.com idle-visible time = 30 min
+instagram.com active browsing time = 0 min
+```
+
+Browser-unfocused behavior should also remain separate:
+
+```text
+Browser page: youtube.com
+Foreground app: VS Code
+
+youtube.com active browsing time = 0 min
+```
+
+If media is playing while the browser is unfocused, 0wl can record that as `background_media_time` instead of normal active browsing.
+
+Dashboard direction:
+
+```text
+Today
+
+Active browsing:        3h 12m
+PiP media:              48m
+Background media:       1h 05m
+Idle visible time:      22m
+```
+
+Domain detail direction:
+
+```text
+youtube.com
+
+Active browsing:        24m
+PiP media:              48m
+Background media:       35m
+Total media exposure:   1h 47m
+```
+
+Why this matters:
+
+```text
+GitHub active browsing: 1h
+YouTube PiP media:      1h
+```
+
+That is more honest than assigning the whole hour to only GitHub or only YouTube.
+
+For time limits, PiP and background media should be configurable:
+
+```text
+Count PiP toward site limits?
+[ ] No, track separately
+[✓] Yes, count it toward limits
+```
+
+Default behavior should be:
+
+- Track PiP and background media separately.
+- Do not count PiP or background media toward active browsing time by default.
+- Let users opt into counting PiP/background media toward time limits.
+
+For 0wl's goals, active browsing time should mean where the user's main browser attention is. PiP and background media still matter, but they should remain separate metrics.
+
+### Settings and Interstitial Footers
+
+Add a small terminal-style footer to the Settings page and extension-owned interstitial pages.
+
+Planned locations:
+
+- Settings page
+- Blocked-site page
+- Time-limit page
+- Friction/intervention pages
+
+The footer should stay minimal, local-first, and consistent with the 0wl aesthetic. It can link to privacy, data control, project information, or local help pages without adding telemetry, accounts, or cloud features.
+
+### Recommended Data Control
+
+Add a Settings data-control section that helps users understand, export, import, retain, and delete local 0wl data.
+
+#### Data Status
+
+Show what is stored locally so users can see what 0wl keeps in their browser.
+
+Example:
+
+```text
+Data stored locally:
+Sessions: 1,284
+Daily usage records: 93
+Blocked attempts: 47
+Vision events: 112
+Site categories: 846 seed / 12 custom
+Oldest record: Jan 12, 2026
+Storage used: 8.4 MB
+```
+
+This should build trust by making local storage visible and understandable.
+
+#### Export Data
+
+Make export prominent.
+
+```text
+Export Data
+Download a local backup of your 0wl data.
+```
+
+Initial action:
+
+```text
+[ Export All Data ]
+```
+
+Future export options:
+
+- Export everything
+- Export browsing sessions only
+- Export settings only
+- Export Vision analytics only
+- CSV export for history
+
+Initial backup filename format:
+
+```text
+0wl-backup-2026-07-14.json
+```
+
+#### Import Data
+
+Support restoring data when reinstalling 0wl or moving browsers.
+
+```text
+Import Data
+Restore 0wl data from a backup file.
+```
+
+Import modes:
+
+- Merge with existing data
+- Replace existing data
+
+Default behavior should be:
+
+- Merge with existing data
+- Require confirmation before replacing existing data
+
+#### Retention Settings
+
+Let users decide how long 0wl keeps history.
+
+```text
+Keep browsing history for:
+[ 30 days ]
+[ 90 days ]
+[ 6 months ]
+[ 1 year ]
+[ Forever ]
+```
+
+Recommended default:
+
+- `1 year`
+
+Vision and pattern features need enough history to be useful, so the default should not be too short.
+
+#### Delete Specific Data
+
+Offer precise deletion controls instead of only one full reset.
+
+Recommended actions:
+
+```text
+[ Delete Browsing History ]
+[ Delete Blocked Attempt History ]
+[ Delete Vision Analytics ]
+[ Reset Custom Site Categories ]
+[ Reset Settings ]
+```
+
+These actions should sit behind confirmation modals.
+
+#### Danger Zone
+
+Keep full reset separate and explicit.
+
+```text
+Danger Zone
+
+Reset All Local Data
+This permanently deletes all 0wl data stored in this browser.
+This cannot be undone.
+
+[ Export Data First ]
+[ Reset All Local Data ]
+```
+
+Require the user to type:
+
+```text
+RESET 0WL
+```
+
+before enabling the final reset button.
+
+#### Ideal Settings Layout
+
+```text
+Data Control
+
+Local Data Status
+- Storage used: 8.4 MB
+- Oldest record: Jan 12, 2026
+- Sessions: 1,284
+- Blocked attempts: 47
+- Vision events: 112
+
+Backup
+[ Export All Data ]
+[ Import Backup ]
+
+History Retention
+Keep history for: [ 1 year v ]
+
+Delete Specific Data
+[ Delete Browsing History ]
+[ Delete Blocked Attempts ]
+[ Delete Vision Analytics ]
+[ Reset Custom Site Categories ]
+[ Reset Settings ]
+
+Danger Zone
+[ Export Data First ]
+[ Reset All Local Data ]
+```
+
+Avoid for now:
+
+- cloud sync
+- account backup
+- automatic remote backup
+- share data
+- telemetry toggle
+
+0wl's privacy pitch is local-first, so these controls should keep everything local.
 
 ### Distraction Pathways
 
@@ -916,7 +1330,7 @@ Planned capabilities:
 - automatically rebuild extension assets
 - automatically reload the extension in Firefox
 - avoid repeatedly using `about:debugging`
-- provide a single development command such as `npm run firefox:dev`
+- provide a single development command such as `npm run dev:firefox`
 
 Expected workflow:
 
@@ -973,12 +1387,12 @@ The goal is to prevent experimental builds from corrupting real browsing history
 Create a single command such as:
 
 ```sh
-npm run firefox:dev
+npm run dev:firefox
 ```
 
 The command should:
 
-- start the Vite build/watch process
+- start the WXT build/watch process
 - watch extension output files
 - launch Firefox
 - load the extension automatically
@@ -1030,7 +1444,8 @@ Example release progression:
 ```text
 0.1.0  Initial tracker
 0.2.0  Blocking improvements
-0.3.0  Distraction pathways
+0.1.3  Vision insights, WXT cross-browser builds, and UI consistency with the 0wl aesthetic
+0.3.0  Expanded behavioral intelligence
 1.0.0  Stable public release
 ```
 
@@ -1042,16 +1457,32 @@ Install dependencies:
 npm install
 ```
 
-Start Vite:
+Start the Firefox WXT dev build:
 
 ```sh
-npm run dev
+npm run dev:firefox
 ```
 
-Build for production:
+Start the Chrome WXT dev build:
 
 ```sh
-npm run build
+npm run dev:chrome
+```
+
+Start the Safari WXT dev build:
+
+```sh
+npm run dev:safari
+```
+
+Build production targets:
+
+```sh
+npm run build:firefox
+npm run build:chrome
+npm run build:edge
+npm run build:opera
+npm run build:safari
 ```
 
 Run tests:
@@ -1078,11 +1509,10 @@ Format files:
 npm run format
 ```
 
-Run in Firefox with `web-ext`:
+Run in Firefox:
 
 ```sh
-npm run build
-npm run firefox
+npm run dev:firefox
 ```
 
 Validate the built extension:
@@ -1091,10 +1521,21 @@ Validate the built extension:
 npm run web-ext:lint
 ```
 
-Package the built extension:
+Package browser-specific builds:
 
 ```sh
-npm run package
+npm run zip:firefox
+npm run zip:chrome
+npm run zip:edge
+npm run zip:opera
+npm run zip:safari
+```
+
+Generate or open the Safari Xcode wrapper:
+
+```sh
+npm run safari:convert
+npm run safari:open
 ```
 
 ## Firefox MV3 Note
@@ -1107,7 +1548,7 @@ When the background starts or wakes, 0wl:
 2. Initializes default settings if needed.
 3. Syncs blocked-site dynamic rules.
 4. Invalidates stale tracking state conservatively.
-5. Resolves the actual current Firefox state.
+5. Resolves the actual current browser state.
 6. Starts a fresh eligible session from the current timestamp.
 
 It never calculates usage as `startup time - old sessionStartedAt` after Firefox has been closed, suspended, crashed, or unavailable.

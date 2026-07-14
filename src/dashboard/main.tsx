@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   averageDailyUsageMs,
   createCalendarWeekUsageBuckets,
   createHourlyUsageBuckets,
+  hasVisibleHistoryBar,
   type DailyUsageBucket,
   type HourlyUsageBucket
 } from "@/shared/historyGraph";
@@ -35,9 +36,18 @@ import type {
   TimeLimitedDomain,
   TodaySummary
 } from "@/shared/types";
+import type {
+  DomainCategory,
+  DomainClassification,
+  FrictionLevel,
+  VisionRecommendation,
+  VisionReport,
+  VisionSettings
+} from "@/vision/types";
 import "@/styles/terminal.css";
 
-type Tab = "today" | "history" | "blocked" | "limits" | "settings";
+type Tab = "today" | "history" | "blocked" | "limits" | "vision" | "settings";
+type VisionTab = "patterns" | "insights" | "recommendations" | "categories";
 type SettingsChanges = Partial<
   Pick<ExtensionSettings, "trackingEnabled" | "idleThresholdSeconds" | "showBlockedAttemptCount">
 >;
@@ -57,6 +67,19 @@ const dayLabels = ["S", "M", "T", "W", "T", "F", "S"] as const;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
+const domainCategories: DomainCategory[] = [
+  "focus",
+  "coding",
+  "school",
+  "research",
+  "communication",
+  "neutral",
+  "mixed",
+  "entertainment",
+  "social",
+  "distraction"
+];
+const frictionLevels: FrictionLevel[] = [0, 1, 2, 3, 4];
 
 function minutesToTimeInput(minutes: number): string {
   const hour = Math.floor(minutes / 60);
@@ -72,6 +95,141 @@ function timeInputToMinutes(value: string): number {
   }
 
   return Math.max(0, Math.min(1439, hour * 60 + minute));
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0%";
+  }
+
+  return `${value.toFixed(value > 0 && value < 1 ? 1 : 0)}%`;
+}
+
+function formatFrictionLevel(level: FrictionLevel): string {
+  switch (level) {
+    case 0:
+      return "Off";
+    case 1:
+      return "Pause";
+    case 2:
+      return "Intent";
+    case 3:
+      return "Delay";
+    case 4:
+      return "Hard stop";
+  }
+}
+
+function TerminalCheckbox({
+  checked,
+  onChange,
+  ariaLabel
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  ariaLabel?: string;
+}): React.JSX.Element {
+  return (
+    <span className="terminal-checkbox">
+      <input
+        aria-label={ariaLabel}
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="terminal-checkbox-box" aria-hidden="true">
+        [{checked ? "✓" : " "}]
+      </span>
+    </span>
+  );
+}
+
+interface TerminalSelectOption<T extends string | number> {
+  label: string;
+  value: T;
+}
+
+function TerminalSelect<T extends string | number>({
+  ariaLabel,
+  value,
+  options,
+  onChange,
+  width = "100%"
+}: {
+  ariaLabel: string;
+  value: T;
+  options: readonly TerminalSelectOption<T>[];
+  onChange: (value: T) => void;
+  width?: string;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selected = options.find((option) => Object.is(option.value, value)) ?? options[0];
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function handlePointerDown(event: PointerEvent): void {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  function selectOption(nextValue: T): void {
+    onChange(nextValue);
+    setOpen(false);
+  }
+
+  return (
+    <div className="terminal-select" ref={rootRef} style={{ width }}>
+      <button
+        className="terminal-select-trigger"
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>{selected?.label ?? ""}</span>
+        <span aria-hidden="true">v</span>
+      </button>
+      {open ? (
+        <div className="terminal-select-menu" role="listbox" aria-label={ariaLabel}>
+          {options.map((option) => (
+            <button
+              className={`terminal-select-option ${
+                Object.is(option.value, value) ? "selected" : ""
+              }`}
+              key={String(option.value)}
+              type="button"
+              role="option"
+              aria-selected={Object.is(option.value, value)}
+              onClick={() => selectOption(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function createCustomSchedule(daysOfWeek: DayOfWeek[] = ALL_DAYS): CustomSchedule {
@@ -185,6 +343,94 @@ function ScheduleEditor({
 }
 
 type UsageBucket = HourlyUsageBucket | DailyUsageBucket;
+const HISTORY_CHART_HEIGHT_PX = 220;
+
+function VisionHelpPopup({ onClose }: { onClose: () => void }): React.JSX.Element {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="terminal-help-overlay"
+      role="presentation"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="terminal-help-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vision-help-title"
+      >
+        <div className="terminal-help-header">
+          <h2 className="terminal-title" id="vision-help-title">
+            Help[?]
+          </h2>
+          <button
+            className="terminal-help-close"
+            type="button"
+            aria-label="Close vision help"
+            onClick={onClose}
+          >
+            [x]
+          </button>
+        </div>
+        <div className="terminal-help-grid">
+          <section>
+            <h3>Patterns</h3>
+            <p>Shows paths you often take from focus sites to distraction sites.</p>
+          </section>
+          <section>
+            <h3>Common transitions</h3>
+            <p>Shows which websites you jump between a lot.</p>
+          </section>
+          <section>
+            <h3>Focus interruptions</h3>
+            <p>Shows when a focus site is followed by a distraction site.</p>
+          </section>
+          <section>
+            <h3>Drift and evasion</h3>
+            <p>Shows when distraction keeps moving or works around blocks.</p>
+          </section>
+          <section>
+            <h3>Insights</h3>
+            <p>Turns your local history into simple clues about your habits.</p>
+          </section>
+          <section>
+            <h3>Pre-distraction context</h3>
+            <p>Shows what you were doing right before a distraction.</p>
+          </section>
+          <section>
+            <h3>Recommendations</h3>
+            <p>Shows small ideas 0wl can use to help you pause.</p>
+          </section>
+          <section>
+            <h3>Friction rules</h3>
+            <p>Adds a pause, question, delay, or stop before a site opens.</p>
+          </section>
+          <section>
+            <h3>Site categories</h3>
+            <p>Tells 0wl what kind of site each website is. You can fix wrong labels.</p>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function UsageBarChart({
   buckets,
@@ -209,6 +455,8 @@ function UsageBarChart({
   );
   const averagePercent =
     averageMs !== undefined ? Math.min(100, Math.max(0, (averageMs / chartMaxMs) * 100)) : null;
+  const averageOffsetPx =
+    averagePercent !== null ? (averagePercent / 100) * HISTORY_CHART_HEIGHT_PX : null;
   const markers =
     variant === "hourly"
       ? [
@@ -221,7 +469,12 @@ function UsageBarChart({
   return (
     <div
       className={`terminal-chart terminal-chart-${variant}`}
-      style={{ "--bar-count": buckets.length } as React.CSSProperties}
+      style={
+        {
+          "--bar-count": buckets.length,
+          "--chart-height": `${HISTORY_CHART_HEIGHT_PX}px`
+        } as React.CSSProperties
+      }
     >
       <div className="terminal-chart-bars">
         {markers.map((marker) => (
@@ -234,16 +487,16 @@ function UsageBarChart({
             <span>{marker.label}</span>
           </div>
         ))}
-        {averagePercent !== null ? (
+        {averageOffsetPx !== null ? (
           <>
             <div
               className="terminal-average-line"
-              style={{ "--average": `${averagePercent}%` } as React.CSSProperties}
+              style={{ "--average-offset": `${averageOffsetPx}px` } as React.CSSProperties}
               aria-hidden="true"
             />
             <span
               className="terminal-average-label"
-              style={{ "--average": `${averagePercent}%` } as React.CSSProperties}
+              style={{ "--average-offset": `${averageOffsetPx}px` } as React.CSSProperties}
               aria-hidden="true"
             >
               avg
@@ -251,7 +504,7 @@ function UsageBarChart({
           </>
         ) : null}
         {buckets.map((bucket) => {
-          const canSelect = bucket.totalMs > 0;
+          const canSelect = hasVisibleHistoryBar(bucket.totalMs);
           const height = canSelect ? Math.max(2, (bucket.totalMs / chartMaxMs) * 100) : 0;
           const label = `${bucket.label}, ${formatHistoryDuration(bucket.totalMs)} browsing time`;
           return (
@@ -671,10 +924,9 @@ function BlockedSitesPage({
                 </span>
                 <span className="terminal-actions">
                   <label className="terminal-toggle">
-                    <input
-                      type="checkbox"
+                    <TerminalCheckbox
                       checked={blocked.enabled}
-                      onChange={(event) => void setEnabled(blocked.id, event.target.checked)}
+                      onChange={(checked) => void setEnabled(blocked.id, checked)}
                     />
                     {blocked.enabled ? "Active" : "Paused"}
                   </label>
@@ -832,17 +1084,12 @@ function TimeLimitsPage({
             }
           }}
         />
-        <select
-          aria-label="Daily time limit"
+        <TerminalSelect
+          ariaLabel="Daily time limit"
           value={limitMinutes}
-          onChange={(event) => setLimitMinutes(Number(event.target.value))}
-        >
-          {timeLimitOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          options={timeLimitOptions}
+          onChange={setLimitMinutes}
+        />
         <button className="terminal-button" type="button" onClick={() => void addLimit()}>
           Limit
         </button>
@@ -865,10 +1112,9 @@ function TimeLimitsPage({
                 </span>
                 <span className="terminal-actions">
                   <label className="terminal-toggle">
-                    <input
-                      type="checkbox"
+                    <TerminalCheckbox
                       checked={limited.enabled}
-                      onChange={(event) => void setEnabled(limited.id, event.target.checked)}
+                      onChange={(checked) => void setEnabled(limited.id, checked)}
                     />
                     {limited.enabled ? "Active" : "Paused"}
                   </label>
@@ -901,17 +1147,12 @@ function TimeLimitsPage({
                         }
                       }}
                     />
-                    <select
-                      aria-label={`Daily limit for ${limited.domain}`}
+                    <TerminalSelect
+                      ariaLabel={`Daily limit for ${limited.domain}`}
                       value={editingLimitMinutes}
-                      onChange={(event) => setEditingLimitMinutes(Number(event.target.value))}
-                    >
-                      {timeLimitOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                      options={timeLimitOptions}
+                      onChange={setEditingLimitMinutes}
+                    />
                     <button
                       className="terminal-button"
                       type="button"
@@ -929,6 +1170,492 @@ function TimeLimitsPage({
           <p className="terminal-muted">No time limits</p>
         )}
       </div>
+    </section>
+  );
+}
+
+function SummaryList({
+  empty,
+  children
+}: {
+  empty: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="terminal-list">
+      {React.Children.count(children) > 0 ? children : <p className="terminal-muted">{empty}</p>}
+    </div>
+  );
+}
+
+function RecommendationRow({
+  recommendation,
+  onApply,
+  onDismiss
+}: {
+  recommendation: VisionRecommendation;
+  onApply: (id: string) => void;
+  onDismiss: (id: string) => void;
+}): React.JSX.Element {
+  return (
+    <div className="terminal-rule">
+      <div className="terminal-list-row">
+        <span className="terminal-rule-copy">
+          <span>{recommendation.title}</span>
+          <span className="terminal-muted">{recommendation.reason}</span>
+          <span className="terminal-muted">{recommendation.supportingMetric}</span>
+          <span>{recommendation.proposedAction}</span>
+        </span>
+        <span className="terminal-actions">
+          {recommendation.action.type !== "none" ? (
+            <button
+              className="terminal-button"
+              type="button"
+              onClick={() => onApply(recommendation.id)}
+            >
+              Apply
+            </button>
+          ) : null}
+          <button
+            className="terminal-button"
+            type="button"
+            onClick={() => onDismiss(recommendation.id)}
+          >
+            Dismiss
+          </button>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CategorySelect({
+  value,
+  onChange
+}: {
+  value: DomainCategory;
+  onChange: (category: DomainCategory) => void;
+}): React.JSX.Element {
+  return (
+    <TerminalSelect
+      ariaLabel="Domain category"
+      value={value}
+      options={domainCategories.map((category) => ({ label: category, value: category }))}
+      onChange={onChange}
+      width="min(100%, 13rem)"
+    />
+  );
+}
+
+function VisionPage(): React.JSX.Element {
+  const [visionTab, setVisionTab] = useState<VisionTab>("patterns");
+  const [showVisionHelp, setShowVisionHelp] = useState(false);
+  const [report, setReport] = useState<VisionReport | null>(null);
+  const [frictionInput, setFrictionInput] = useState("");
+  const [frictionLevel, setFrictionLevel] = useState<FrictionLevel>(1);
+  const [frictionSchedule, setFrictionSchedule] = useState<ScheduleConfig>(ALWAYS_SCHEDULE);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadReport(): Promise<void> {
+    try {
+      setReport(await sendMessage<VisionReport>({ type: "GET_VISION_REPORT" }));
+      setError(null);
+    } catch (visionError) {
+      setError(visionError instanceof Error ? visionError.message : "Unable to load vision.");
+    }
+  }
+
+  useEffect(() => {
+    void loadReport();
+  }, []);
+
+  async function setCategory(domain: string, primaryCategory: DomainCategory): Promise<void> {
+    setReport(
+      await sendMessage<VisionReport>({
+        type: "SET_DOMAIN_CLASSIFICATION",
+        domain,
+        primaryCategory
+      })
+    );
+  }
+
+  async function resetCategory(domain: string): Promise<void> {
+    setReport(await sendMessage<VisionReport>({ type: "RESET_DOMAIN_CLASSIFICATION", domain }));
+  }
+
+  async function updateVisionSettings(changes: Partial<VisionSettings>): Promise<void> {
+    await sendMessage<VisionSettings>({ type: "UPDATE_VISION_SETTINGS", changes });
+    await loadReport();
+  }
+
+  async function dismissRecommendation(id: string): Promise<void> {
+    setReport(await sendMessage<VisionReport>({ type: "DISMISS_VISION_RECOMMENDATION", id }));
+  }
+
+  async function applyRecommendation(id: string): Promise<void> {
+    setReport(await sendMessage<VisionReport>({ type: "APPLY_VISION_RECOMMENDATION", id }));
+  }
+
+  async function saveFrictionRule(
+    domain: string,
+    level: FrictionLevel,
+    schedule: ScheduleConfig,
+    enabled = true
+  ): Promise<void> {
+    try {
+      setReport(
+        await sendMessage<VisionReport>({
+          type: "UPSERT_FRICTION_RULE",
+          domain,
+          level,
+          schedule,
+          enabled
+        })
+      );
+      setFrictionInput("");
+      setFrictionSchedule(ALWAYS_SCHEDULE);
+      setError(null);
+    } catch (frictionError) {
+      setError(frictionError instanceof Error ? frictionError.message : "Unable to save friction.");
+    }
+  }
+
+  async function removeFrictionRule(id: string): Promise<void> {
+    setReport(await sendMessage<VisionReport>({ type: "REMOVE_FRICTION_RULE", id }));
+  }
+
+  const settings = report?.settings;
+  const classified = report?.classifiedDomains ?? [];
+  const unclassified = report?.unclassifiedDomains ?? [];
+
+  return (
+    <section className="terminal-section">
+      <h1 className="terminal-title">Vision</h1>
+      <div className="terminal-tabs">
+        {(["patterns", "insights", "recommendations", "categories"] as const).map((option) => (
+          <button
+            className={`terminal-button ${visionTab === option ? "active" : ""}`}
+            key={option}
+            type="button"
+            onClick={() => setVisionTab(option)}
+          >
+            {option === "categories" ? "site categories" : option}
+          </button>
+        ))}
+        <button
+          className={`terminal-help-button ${showVisionHelp ? "active" : ""}`}
+          type="button"
+          aria-label="Explain vision sections"
+          aria-expanded={showVisionHelp}
+          onClick={() => setShowVisionHelp((current) => !current)}
+        >
+          [?]
+        </button>
+      </div>
+
+      {showVisionHelp ? <VisionHelpPopup onClose={() => setShowVisionHelp(false)} /> : null}
+
+      {error ? <p className="terminal-error">{error}</p> : null}
+      {!report ? <p className="terminal-muted">Loading local patterns...</p> : null}
+
+      {report && visionTab === "patterns" ? (
+        <div className="terminal-vision-grid">
+          <section>
+            <h2 className="terminal-title">Distraction pathways</h2>
+            <SummaryList empty="No pathways detected yet.">
+              {report.pathways.map((pathway) => (
+                <div className="terminal-list-row" key={pathway.id}>
+                  <span>{pathway.domains.join(" -> ")}</span>
+                  <span>{pathway.count}x</span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Common transitions</h2>
+            <SummaryList empty="No transitions recorded yet.">
+              {report.transitions.slice(0, 8).map((transition) => (
+                <div className="terminal-list-row" key={transition.id}>
+                  <span>{`${transition.fromDomain} -> ${transition.toDomain}`}</span>
+                  <span>{transition.count}x</span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Focus interruptions</h2>
+            <SummaryList empty="No focus interruptions detected yet.">
+              {report.focusInterruptions.map((transition) => (
+                <div className="terminal-list-row" key={transition.id}>
+                  <span>{`${transition.fromDomain} -> ${transition.toDomain}`}</span>
+                  <span>{transition.count}x</span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Drift and evasion</h2>
+            <SummaryList empty="No drift or evasion patterns yet.">
+              {[...report.sessionDrifts, ...report.blockEvasions].map((pathway) => (
+                <div className="terminal-list-row" key={pathway.id}>
+                  <span>{pathway.domains.join(" -> ")}</span>
+                  <span>{formatHistoryDuration(pathway.averageDiversionMs)}</span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+        </div>
+      ) : null}
+
+      {report && visionTab === "insights" ? (
+        <div className="terminal-vision-grid">
+          <section>
+            <h2 className="terminal-title">Trends</h2>
+            <div className="terminal-grid">
+              <span>Today distraction</span>
+              <span>{formatHistoryDuration(report.trends.dailyDistractionMs)}</span>
+              <span>This week distraction</span>
+              <span>{formatHistoryDuration(report.trends.weeklyDistractionMs)}</span>
+              <span>This month distraction</span>
+              <span>{formatHistoryDuration(report.trends.monthlyDistractionMs)}</span>
+              <span>Blocked attempts</span>
+              <span>{report.trends.blockedAttemptCount}</span>
+              <span>Bounce back</span>
+              <span>{formatPercent(report.bounceBackRate)}</span>
+              <span>Net time reclaimed</span>
+              <span>{formatHistoryDuration(report.netTimeReclaimedMsPerDay)} / day</span>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Personal insights</h2>
+            <SummaryList empty="Insights appear after more local history is available.">
+              {report.insights.map((insight) => (
+                <div className="terminal-rule" key={insight.id}>
+                  <span>{insight.text}</span>
+                  <span className="terminal-muted">{insight.supportingMetric}</span>
+                  {insight.suggestedAction ? <span>{insight.suggestedAction}</span> : null}
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Pre-distraction context</h2>
+            <SummaryList empty="No recurring context detected yet.">
+              {report.contexts.map((context) => (
+                <div className="terminal-rule" key={context.domain}>
+                  <span>{context.domain}</span>
+                  <span className="terminal-muted">
+                    after {context.previousCategories[0]?.category ?? "unknown"} (
+                    {formatPercent(context.previousCategories[0]?.percent ?? 0)})
+                  </span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Block outcomes</h2>
+            <SummaryList empty="No blocked-site outcomes yet.">
+              {report.blockOutcomes.map((outcome) => (
+                <div className="terminal-rule" key={outcome.domain}>
+                  <span>{outcome.domain}</span>
+                  <span className="terminal-muted">
+                    focus {formatPercent(outcome.returnedToFocusPercent)} / substitute{" "}
+                    {formatPercent(outcome.substituteDistractionPercent)}
+                  </span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+        </div>
+      ) : null}
+
+      {report && visionTab === "recommendations" && settings ? (
+        <div className="terminal-vision-grid">
+          <section>
+            <h2 className="terminal-title">Adaptive settings</h2>
+            <div className="terminal-list">
+              <label className="terminal-list-row">
+                <span>Adaptive recommendations</span>
+                <TerminalCheckbox
+                  checked={settings.adaptiveRecommendationsEnabled}
+                  onChange={(checked) =>
+                    void updateVisionSettings({
+                      adaptiveRecommendationsEnabled: checked
+                    })
+                  }
+                />
+              </label>
+              <label className="terminal-list-row">
+                <span>Adaptive enforcement</span>
+                <TerminalCheckbox
+                  checked={settings.adaptiveEnforcementEnabled}
+                  onChange={(checked) =>
+                    void updateVisionSettings({
+                      adaptiveEnforcementEnabled: checked
+                    })
+                  }
+                />
+              </label>
+              <div className="terminal-list-row">
+                <span>Max automatic friction</span>
+                <TerminalSelect
+                  ariaLabel="Max automatic friction"
+                  value={settings.maxAutomaticFrictionLevel}
+                  options={frictionLevels.map((level) => ({
+                    label: formatFrictionLevel(level),
+                    value: level
+                  }))}
+                  onChange={(level) =>
+                    void updateVisionSettings({
+                      maxAutomaticFrictionLevel: level
+                    })
+                  }
+                  width="min(100%, 13rem)"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Recommendations</h2>
+            <SummaryList empty="No recommendations yet.">
+              {report.recommendations.map((recommendation) => (
+                <RecommendationRow
+                  key={recommendation.id}
+                  recommendation={recommendation}
+                  onApply={(id) => void applyRecommendation(id)}
+                  onDismiss={(id) => void dismissRecommendation(id)}
+                />
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Friction rules</h2>
+            <div className="terminal-input-row terminal-input-row-three">
+              <input
+                aria-label="Friction website domain"
+                placeholder="Enter website..."
+                value={frictionInput}
+                onChange={(event) => setFrictionInput(event.target.value)}
+              />
+              <TerminalSelect
+                ariaLabel="Friction level"
+                value={frictionLevel}
+                options={frictionLevels.map((level) => ({
+                  label: formatFrictionLevel(level),
+                  value: level
+                }))}
+                onChange={setFrictionLevel}
+              />
+              <button
+                className="terminal-button"
+                type="button"
+                onClick={() =>
+                  void saveFrictionRule(frictionInput, frictionLevel, frictionSchedule)
+                }
+              >
+                Save
+              </button>
+            </div>
+            <ScheduleEditor schedule={frictionSchedule} onChange={setFrictionSchedule} />
+            <div className="terminal-list" style={{ marginTop: "1rem" }}>
+              {settings.frictionRules.length > 0 ? (
+                settings.frictionRules.map((rule) => (
+                  <div className="terminal-rule" key={rule.id}>
+                    <div className="terminal-list-row">
+                      <span className="terminal-rule-copy">
+                        <span>{rule.domain}</span>
+                        <span className="terminal-muted">{formatFrictionLevel(rule.level)}</span>
+                        <span className="terminal-muted">
+                          {formatScheduleSummary(rule.schedule)}
+                        </span>
+                      </span>
+                      <span className="terminal-actions">
+                        <label className="terminal-toggle">
+                          <TerminalCheckbox
+                            checked={rule.enabled}
+                            onChange={(checked) =>
+                              void saveFrictionRule(rule.domain, rule.level, rule.schedule, checked)
+                            }
+                          />
+                          {rule.enabled ? "Active" : "Paused"}
+                        </label>
+                        <button
+                          className="terminal-button"
+                          type="button"
+                          onClick={() => void removeFrictionRule(rule.id)}
+                        >
+                          Remove
+                        </button>
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="terminal-muted">No friction rules</p>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {report && visionTab === "categories" ? (
+        <div className="terminal-vision-grid">
+          <section>
+            <h2 className="terminal-title">Classified sites</h2>
+            <p className="terminal-muted">{report.seedClassificationCount} seed classifications</p>
+            <SummaryList empty="No classified visited sites yet.">
+              {classified.map((classification: DomainClassification) => (
+                <div className="terminal-list-row" key={classification.domain}>
+                  <span className="terminal-rule-copy">
+                    <span>{classification.domain}</span>
+                    <span className="terminal-muted">
+                      {classification.source} / {classification.confidence.toFixed(2)}
+                    </span>
+                  </span>
+                  <span className="terminal-actions">
+                    <CategorySelect
+                      value={classification.primaryCategory}
+                      onChange={(category) => void setCategory(classification.domain, category)}
+                    />
+                    {classification.source === "user" ? (
+                      <button
+                        className="terminal-button"
+                        type="button"
+                        onClick={() => void resetCategory(classification.domain)}
+                      >
+                        Reset
+                      </button>
+                    ) : null}
+                  </span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Unclassified sites</h2>
+            <SummaryList empty="No unclassified visited sites yet.">
+              {unclassified.map((domain) => (
+                <div className="terminal-list-row" key={domain}>
+                  <span>{domain}</span>
+                  <CategorySelect
+                    value="neutral"
+                    onChange={(category) => void setCategory(domain, category)}
+                  />
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -954,37 +1681,28 @@ function SettingsPage({
       <div className="terminal-list">
         <label className="terminal-list-row">
           <span>Tracking enabled</span>
-          <input
-            type="checkbox"
+          <TerminalCheckbox
             checked={settings?.trackingEnabled ?? true}
-            onChange={(event) => void updateSettings({ trackingEnabled: event.target.checked })}
+            onChange={(checked) => void updateSettings({ trackingEnabled: checked })}
           />
         </label>
 
-        <label className="terminal-list-row">
+        <div className="terminal-list-row">
           <span>Idle threshold</span>
-          <select
+          <TerminalSelect
+            ariaLabel="Idle threshold"
             value={settings?.idleThresholdSeconds ?? 60}
-            onChange={(event) =>
-              void updateSettings({ idleThresholdSeconds: Number(event.target.value) })
-            }
-          >
-            {idleOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={idleOptions}
+            onChange={(idleThresholdSeconds) => void updateSettings({ idleThresholdSeconds })}
+            width="min(100%, 13rem)"
+          />
+        </div>
 
         <label className="terminal-list-row">
           <span>Show blocked attempt counts</span>
-          <input
-            type="checkbox"
+          <TerminalCheckbox
             checked={settings?.showBlockedAttemptCount ?? true}
-            onChange={(event) =>
-              void updateSettings({ showBlockedAttemptCount: event.target.checked })
-            }
+            onChange={(checked) => void updateSettings({ showBlockedAttemptCount: checked })}
           />
         </label>
       </div>
@@ -1039,6 +1757,8 @@ function Dashboard(): React.JSX.Element {
         return <BlockedSitesPage settings={settings} onSettingsChanged={setSettings} />;
       case "limits":
         return <TimeLimitsPage settings={settings} onSettingsChanged={setSettings} />;
+      case "vision":
+        return <VisionPage />;
       case "settings":
         return <SettingsPage settings={settings} onSettingsChanged={setSettings} />;
     }
@@ -1049,21 +1769,27 @@ function Dashboard(): React.JSX.Element {
       <div className="terminal-frame">
         <header className="terminal-header">
           <span>[0wl]</span>
-          <nav className="terminal-tabs" aria-label="Dashboard sections">
-            {(["today", "history", "blocked", "limits", "settings"] as const).map((option) => (
-              <button
-                className={`terminal-button ${tab === option ? "active" : ""}`}
-                key={option}
-                type="button"
-                onClick={() => setTab(option)}
-              >
-                {option === "blocked"
-                  ? "blocked sites"
-                  : option === "limits"
-                    ? "time limits"
-                    : option}
-              </button>
-            ))}
+          <nav className="terminal-tabs terminal-dashboard-tabs" aria-label="Dashboard sections">
+            {(["today", "history", "blocked", "limits", "vision", "settings"] as const).map(
+              (option) => (
+                <button
+                  className={`terminal-button ${tab === option ? "active" : ""}`}
+                  key={option}
+                  type="button"
+                  aria-label={option === "settings" ? "settings" : undefined}
+                  title={option === "settings" ? "settings" : undefined}
+                  onClick={() => setTab(option)}
+                >
+                  {option === "blocked"
+                    ? "blocked sites"
+                    : option === "limits"
+                      ? "time limits"
+                      : option === "settings"
+                        ? "⚙"
+                        : option}
+                </button>
+              )
+            )}
           </nav>
         </header>
 

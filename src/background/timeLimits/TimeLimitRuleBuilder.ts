@@ -1,9 +1,11 @@
+import type { Browser } from "wxt/browser";
 import {
   TIME_LIMIT_PAGE_PATH,
   TIME_LIMIT_RULE_ID_MIN,
   TIME_LIMIT_RULE_ID_SPAN
 } from "@/shared/constants";
 import { stableRuleIdForDomain } from "@/background/blocking/DynamicRuleBuilder";
+import { browser as extensionBrowser } from "@/shared/browser";
 
 export function stableTimeLimitRuleIdForDomain(domain: string): number {
   return stableRuleIdForDomain(domain, TIME_LIMIT_RULE_ID_MIN, TIME_LIMIT_RULE_ID_SPAN);
@@ -16,7 +18,9 @@ export function isManagedTimeLimitRuleId(ruleId: number): boolean {
 }
 
 export function buildTimeLimitPageUrl(domain: string, returnUrl?: string): string {
-  const url = new URL(browser.runtime.getURL(TIME_LIMIT_PAGE_PATH));
+  const url = new URL(
+    extensionBrowser.runtime.getURL(TIME_LIMIT_PAGE_PATH as Parameters<typeof extensionBrowser.runtime.getURL>[0])
+  );
   url.searchParams.set("domain", domain);
 
   if (returnUrl) {
@@ -26,7 +30,7 @@ export function buildTimeLimitPageUrl(domain: string, returnUrl?: string): strin
   return url.toString();
 }
 
-export function buildTimeLimitRule(domain: string): browser.declarativeNetRequest.Rule {
+export function buildTimeLimitRule(domain: string): Browser.declarativeNetRequest.Rule {
   return {
     id: stableTimeLimitRuleIdForDomain(domain),
     priority: 1,

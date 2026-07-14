@@ -40,4 +40,12 @@ export class SessionRepository {
       .filter((session) => session.endedAt > startInclusive && session.startedAt < endExclusive)
       .sort((a, b) => b.startedAt - a.startedAt);
   }
+
+  async listAll(): Promise<UsageSession[]> {
+    const db = await openDatabase();
+    const transaction = db.transaction(STORE_SESSIONS, "readonly");
+    const sessions = await requestToPromise(transaction.objectStore(STORE_SESSIONS).getAll());
+    await transactionDone(transaction);
+    return sessions.sort((a, b) => a.startedAt - b.startedAt);
+  }
 }

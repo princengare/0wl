@@ -1,6 +1,7 @@
 import { normalizeDomain } from "@/shared/domain";
 import { SETTINGS_STORAGE_KEY, createDefaultSettings } from "./defaults";
 import { ALWAYS_SCHEDULE, normalizeSchedule } from "@/shared/schedule";
+import { browser as extensionBrowser } from "@/shared/browser";
 import type {
   BlockedDomain,
   ExtensionSettings,
@@ -258,7 +259,7 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
 }
 
 export class SettingsStore {
-  constructor(private readonly storageArea: StorageArea = browser.storage.local) {}
+  constructor(private readonly storageArea: StorageArea = extensionBrowser.storage.local) {}
 
   async initializeDefaults(now = Date.now()): Promise<ExtensionSettings> {
     return (await this.migrateStoredSettings(now)).settings;

@@ -3,7 +3,16 @@ import type { ExtensionLifecycleManager } from "../lifecycle/ExtensionLifecycleM
 import type { TimeLimitManager } from "../timeLimits/TimeLimitManager";
 import type { TrackingEngine } from "./TrackingEngine";
 import type { SettingsStore } from "@/storage/SettingsStore";
-import { BLOCK_RULE_ALARM_NAME } from "@/shared/constants";
+import type { FrictionRuleManager } from "@/vision/friction/FrictionRuleManager";
+import type { VisionSettingsStore } from "@/vision/settings/VisionSettingsStore";
+import { browser } from "@/shared/browser";
+import { addAlarmListener } from "@/platform/alarmsApi";
+import { addIdleStateChangedListener, setIdleDetectionInterval } from "@/platform/idleApi";
+import {
+  BLOCK_RULE_ALARM_NAME,
+  FRICTION_RULE_ALARM_NAME,
+  VISION_SETTINGS_STORAGE_KEY
+} from "@/shared/constants";
 import type { ReconcileReason } from "@/shared/types";
 
 interface TrackingEventHandlerDependencies {
@@ -11,6 +20,8 @@ interface TrackingEventHandlerDependencies {
   settingsStore: SettingsStore;
   blockRuleManager: BlockRuleManager;
   timeLimitManager: TimeLimitManager;
+  visionSettingsStore: VisionSettingsStore;
+  frictionRuleManager: FrictionRuleManager;
   lifecycleManager: ExtensionLifecycleManager;
   bootstrap: (reason: ReconcileReason) => Promise<void>;
 }
@@ -26,6 +37,8 @@ export function registerTrackingEventHandlers({
   settingsStore,
   blockRuleManager,
   timeLimitManager,
+  visionSettingsStore,
+  frictionRuleManager,
   lifecycleManager,
   bootstrap
 }: TrackingEventHandlerDependencies): void {
@@ -62,11 +75,11 @@ export function registerTrackingEventHandlers({
     runSafely(reconcileAndRefresh(reason));
   });
 
-  browser.idle.onStateChanged.addListener((state) => {
+  addIdleStateChangedListener((state) => {
     runSafely(reconcileAndRefresh(state === "active" ? "idle-resumed" : "idle"));
   });
 
-  browser.alarms.onAlarm.addListener((alarm) => {
+  addAlarmListener((alarm) => {
     runSafely(
       (async () => {
         if (alarm.name === BLOCK_RULE_ALARM_NAME) {
@@ -76,25 +89,38 @@ export function registerTrackingEventHandlers({
           return;
         }
 
+        if (alarm.name === FRICTION_RULE_ALARM_NAME) {
+          const settings = await visionSettingsStore.get();
+          await frictionRuleManager.refreshDynamicRules(settings.frictionRules);
+          return;
+        }
+
         await timeLimitManager.handleAlarm(alarm.name);
       })()
     );
   });
 
   browser.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !changes.settings) {
+    if (areaName !== "local") {
       return;
     }
 
     runSafely(
       (async () => {
-        const settings = await settingsStore.get();
-        browser.idle.setDetectionInterval(settings.idleThresholdSeconds);
-        await blockRuleManager.refreshDynamicRules(settings.blockedDomains);
-        await trackingEngine.reconcileTrackingState(
-          settings.trackingEnabled ? "settings-changed" : "tracking-disabled"
-        );
-        await timeLimitManager.refresh();
+        if (changes.settings) {
+          const settings = await settingsStore.get();
+          setIdleDetectionInterval(settings.idleThresholdSeconds);
+          await blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+          await trackingEngine.reconcileTrackingState(
+            settings.trackingEnabled ? "settings-changed" : "tracking-disabled"
+          );
+          await timeLimitManager.refresh();
+        }
+
+        if (changes[VISION_SETTINGS_STORAGE_KEY]) {
+          const settings = await visionSettingsStore.get();
+          await frictionRuleManager.refreshDynamicRules(settings.frictionRules);
+        }
       })()
     );
   });

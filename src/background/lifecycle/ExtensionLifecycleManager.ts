@@ -1,7 +1,12 @@
 import type { LifecycleStore } from "@/storage/LifecycleStore";
+import { browser as extensionBrowser } from "@/shared/browser";
 import type { ReconcileReason } from "@/shared/types";
 
-type RuntimeInstallDetails = browser.runtime._OnInstalledDetails;
+interface RuntimeInstallDetails {
+  reason?: string;
+  previousVersion?: string;
+  temporary?: boolean;
+}
 
 interface ExtensionLifecycleManagerDependencies {
   lifecycleStore: LifecycleStore;
@@ -27,11 +32,11 @@ export class ExtensionLifecycleManager {
   }
 
   async handleInstalled(details: RuntimeInstallDetails): Promise<void> {
-    const manifest = browser.runtime.getManifest();
+    const manifest = extensionBrowser.runtime.getManifest();
 
     await this.dependencies.lifecycleStore.recordInstallEvent(
       {
-        extensionId: browser.runtime.id ?? null,
+        extensionId: extensionBrowser.runtime.id ?? null,
         installedVersion: manifest.version,
         previousVersion: details.previousVersion ?? null,
         lastInstallReason: normalizeInstallReason(details.reason),

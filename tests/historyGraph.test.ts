@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   averageDailyUsageMs,
   createCalendarWeekUsageBuckets,
-  createHourlyUsageBuckets
+  createHourlyUsageBuckets,
+  hasVisibleHistoryBar
 } from "@/shared/historyGraph";
 
 function at(day: number, hour: number, minute = 0): number {
@@ -83,5 +84,10 @@ describe("history graph aggregation", () => {
     const buckets = createCalendarWeekUsageBuckets([], at(8, 12));
 
     expect(averageDailyUsageMs(buckets)).toBe(0);
+  });
+
+  it("does not render sub-second history buckets as visible bars", () => {
+    expect(hasVisibleHistoryBar(999)).toBe(false);
+    expect(hasVisibleHistoryBar(1000)).toBe(true);
   });
 });

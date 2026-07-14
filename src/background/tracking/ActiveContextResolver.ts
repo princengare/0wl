@@ -1,12 +1,14 @@
 import { normalizeDomainFromUrl } from "@/shared/domain";
+import { browser as extensionBrowser } from "@/shared/browser";
 import { isTrackableUrl } from "@/shared/url";
+import { queryIdleState } from "@/platform/idleApi";
 import type { ActiveBrowserContext, ExtensionSettings } from "@/shared/types";
 
 export class ActiveContextResolver {
   async resolve(settings: ExtensionSettings): Promise<ActiveBrowserContext> {
     const [windows, idleState] = await Promise.all([
-      browser.windows.getAll({ populate: true, windowTypes: ["normal"] }),
-      browser.idle.queryState(settings.idleThresholdSeconds)
+      extensionBrowser.windows.getAll({ populate: true, windowTypes: ["normal"] }),
+      queryIdleState(settings.idleThresholdSeconds)
     ]);
 
     const focusedWindow = windows.find((window) => window.focused);

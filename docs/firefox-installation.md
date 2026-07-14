@@ -6,6 +6,8 @@
 
 Current approved version: `0.1.2`
 
+Current source release target: `0.1.3`
+
 Install from Firefox Add-ons:
 
 https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
@@ -18,13 +20,16 @@ For local development:
 
 ```sh
 npm install
-npm run build
-npm run firefox
+npm run dev:firefox
 ```
 
-Or load `dist/manifest.json` from `about:debugging#/runtime/this-firefox`.
+Or build and load `.output/firefox-mv3/manifest.json` from `about:debugging#/runtime/this-firefox`:
 
-Do not load `public/manifest.json`; `public/` only contains static source assets, while the runnable extension pages and background script are generated into `dist/`.
+```sh
+npm run build:firefox
+```
+
+Do not load a source manifest. WXT generates the runnable Firefox manifest, pages, and background script into `.output/firefox-mv3/`.
 
 Temporary installations are removed when the development browser profile is reset or the add-on is unloaded.
 
