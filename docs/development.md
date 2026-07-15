@@ -38,7 +38,7 @@ Generated folders such as `.output/`, `.wxt/`, and `.web-ext-profile/` are ignor
 
 Current UI conventions:
 
-- Use bundled JetBrains Mono with `ss02`, `cv03`, and slashed-zero OpenType features.
+- Use bundled JetBrains Mono with `ss01` and slashed-zero OpenType features.
 - Use bracket checkboxes: `[ ]` for off and `[✓]` for on.
 - Underline checkbox rows on hover or keyboard focus.
 - Use custom terminal dropdowns instead of native `<select>` controls in the dashboard.

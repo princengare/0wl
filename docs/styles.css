@@ -34,7 +34,7 @@
 :root {
   --font-terminal:
     "JetBrains Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  --font-terminal-features: "ss02", "cv03", "zero";
+  --font-terminal-features: "ss01", "zero";
 
   color: #f7f7f7;
   background: #000;
