@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   averageDailyUsageMs,
@@ -9,6 +9,8 @@ import {
   type HourlyUsageBucket
 } from "@/shared/historyGraph";
 import { getHistoryPanelMode } from "@/shared/historySelection";
+import { browser } from "@/shared/browser";
+import { ExtensionFooter } from "@/shared/ExtensionFooter";
 import { sendMessage } from "@/shared/messagingClient";
 import {
   formatClockRange,
@@ -28,8 +30,14 @@ import {
 import type {
   BlockedDomain,
   CustomSchedule,
+  DataBackup,
+  DataControlStatus,
+  DataDeleteTarget,
+  DataExportResult,
+  DataImportMode,
   DayOfWeek,
   ExtensionSettings,
+  HistoryRetentionDays,
   HistoryRange,
   HistorySessionView,
   ScheduleConfig,
@@ -40,6 +48,7 @@ import type {
   DomainCategory,
   DomainClassification,
   FrictionLevel,
+  PathwaySummary,
   VisionRecommendation,
   VisionReport,
   VisionSettings
@@ -49,7 +58,10 @@ import "@/styles/terminal.css";
 type Tab = "today" | "history" | "blocked" | "limits" | "vision" | "settings";
 type VisionTab = "patterns" | "insights" | "recommendations" | "categories";
 type SettingsChanges = Partial<
-  Pick<ExtensionSettings, "trackingEnabled" | "idleThresholdSeconds" | "showBlockedAttemptCount">
+  Pick<
+    ExtensionSettings,
+    "trackingEnabled" | "idleThresholdSeconds" | "showBlockedAttemptCount" | "historyRetentionDays"
+  >
 >;
 
 const idleOptions = [
@@ -58,6 +70,22 @@ const idleOptions = [
   { label: "2 minutes", value: 120 },
   { label: "5 minutes", value: 300 }
 ] as const;
+
+const retentionOptions = [
+  { label: "30 days", value: "30" },
+  { label: "90 days", value: "90" },
+  { label: "6 months", value: "180" },
+  { label: "1 year", value: "365" },
+  { label: "Forever", value: "forever" }
+] as const;
+
+const deleteSpecificOptions: Array<{ label: string; value: Exclude<DataDeleteTarget, "settings"> }> =
+  [
+    { label: "Delete Browsing History", value: "browsing-history" },
+    { label: "Delete Blocked Attempts", value: "blocked-attempts" },
+    { label: "Delete Vision Analytics", value: "vision-analytics" },
+    { label: "Reset Custom Site Categories", value: "custom-site-categories" }
+  ];
 
 const timeLimitOptions = [1, 5, 10, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300].map(
   (value) => ({ label: formatDurationMinutes(value), value })
@@ -80,6 +108,88 @@ const domainCategories: DomainCategory[] = [
   "distraction"
 ];
 const frictionLevels: FrictionLevel[] = [0, 1, 2, 3, 4];
+const DASHBOARD_BRAND_MODE_STORAGE_KEY = "0wl:dashboard-brand-mode";
+
+function isDashboardTab(value: string | null): value is Tab {
+  return (
+    value === "today" ||
+    value === "history" ||
+    value === "blocked" ||
+    value === "limits" ||
+    value === "vision" ||
+    value === "settings"
+  );
+}
+
+function readInitialTab(): Tab {
+  const params = new URLSearchParams(window.location.search);
+  const queryTab = params.get("tab");
+
+  if (isDashboardTab(queryTab)) {
+    return queryTab;
+  }
+
+  const hashTab = window.location.hash.replace(/^#/, "");
+  return isDashboardTab(hashTab) ? hashTab : "today";
+}
+
+function readInitialBrandMode(): "text" | "icon" {
+  return window.localStorage.getItem(DASHBOARD_BRAND_MODE_STORAGE_KEY) === "icon" ? "icon" : "text";
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+
+  const units = ["B", "KB", "MB", "GB"] as const;
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatRecordDate(timestamp: number | null): string {
+  if (timestamp === null) {
+    return "none";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  }).format(new Date(timestamp));
+}
+
+function retentionToSelectValue(value: HistoryRetentionDays): string {
+  return value === null ? "forever" : String(value);
+}
+
+function selectValueToRetention(value: string): HistoryRetentionDays {
+  if (value === "forever") {
+    return null;
+  }
+
+  const days = Number(value);
+  return days === 30 || days === 90 || days === 180 || days === 365 ? days : 365;
+}
+
+function downloadBackup(result: DataExportResult): void {
+  const blob = new Blob([JSON.stringify(result.backup, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = result.fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 function minutesToTimeInput(minutes: number): string {
   const hour = Math.floor(minutes / 60);
@@ -743,7 +853,7 @@ function HistoryPage(): React.JSX.Element {
             {showWeekControls ? (
               <div className="terminal-week-nav">
                 <button
-                  className="terminal-button"
+                  className="terminal-button terminal-week-button"
                   type="button"
                   disabled={!hasPreviousWeekData}
                   onClick={() => setWeekOffset((offset) => offset - 1)}
@@ -752,7 +862,7 @@ function HistoryPage(): React.JSX.Element {
                 </button>
                 <span>{weekLabel}</span>
                 <button
-                  className="terminal-button"
+                  className="terminal-button terminal-week-button"
                   type="button"
                   disabled={weekOffset >= 0}
                   onClick={() => setWeekOffset((offset) => Math.min(0, offset + 1))}
@@ -773,10 +883,15 @@ function HistoryPage(): React.JSX.Element {
               onSelect={setSelectedBucketId}
             />
             {panelMode === "day-summary" && selectedDailyBucket ? (
-              <DomainBreakdown
-                title={fullDateFormatter.format(new Date(selectedDailyBucket.start))}
-                bucket={selectedDailyBucket}
-              />
+              <div
+                className="terminal-history-panel"
+                onPointerDown={() => setSelectedBucketId(null)}
+              >
+                <DomainBreakdown
+                  title={fullDateFormatter.format(new Date(selectedDailyBucket.start))}
+                  bucket={selectedDailyBucket}
+                />
+              </div>
             ) : (
               <p className="terminal-muted">Select a day to see site totals.</p>
             )}
@@ -791,7 +906,12 @@ function HistoryPage(): React.JSX.Element {
               onSelect={setSelectedBucketId}
             />
             {panelMode === "hour-summary" && selectedHourlyBucket ? (
-              <DomainBreakdown title={selectedHourlyBucket.label} bucket={selectedHourlyBucket} />
+              <div
+                className="terminal-history-panel"
+                onPointerDown={() => setSelectedBucketId(null)}
+              >
+                <DomainBreakdown title={selectedHourlyBucket.label} bucket={selectedHourlyBucket} />
+              </div>
             ) : panelMode === "today-sessions" ? (
               <div className="terminal-list" style={{ marginTop: "2rem" }}>
                 {sessions.length > 0 ? (
@@ -1188,6 +1308,37 @@ function SummaryList({
   );
 }
 
+function PathwaySummaryRow({
+  pathway,
+  metric
+}: {
+  pathway: PathwaySummary;
+  metric: string;
+}): React.JSX.Element {
+  const label = pathway.displayLabel ?? pathway.displaySegments?.join(" -> ") ?? pathway.domains.join(" -> ");
+  const details = pathway.details ?? [
+    { label: "raw domains", value: (pathway.rawDomains ?? pathway.domains).join(" -> ") },
+    { label: "repeat count", value: `${pathway.count}x` }
+  ];
+
+  return (
+    <details className="terminal-pathway-details">
+      <summary className="terminal-list-row">
+        <span>{label}</span>
+        <span>{metric}</span>
+      </summary>
+      <div className="terminal-grid terminal-pathway-metadata">
+        {details.map((row) => (
+          <React.Fragment key={`${pathway.id}:${row.label}`}>
+            <span>{row.label}</span>
+            <span>{row.value}</span>
+          </React.Fragment>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function RecommendationRow({
   recommendation,
   onApply,
@@ -1209,7 +1360,7 @@ function RecommendationRow({
         <span className="terminal-actions">
           {recommendation.action.type !== "none" ? (
             <button
-              className="terminal-button"
+              className="terminal-button terminal-action-invert"
               type="button"
               onClick={() => onApply(recommendation.id)}
             >
@@ -1217,7 +1368,7 @@ function RecommendationRow({
             </button>
           ) : null}
           <button
-            className="terminal-button"
+            className="terminal-button terminal-action-invert"
             type="button"
             onClick={() => onDismiss(recommendation.id)}
           >
@@ -1364,10 +1515,7 @@ function VisionPage(): React.JSX.Element {
             <h2 className="terminal-title">Distraction pathways</h2>
             <SummaryList empty="No pathways detected yet.">
               {report.pathways.map((pathway) => (
-                <div className="terminal-list-row" key={pathway.id}>
-                  <span>{pathway.domains.join(" -> ")}</span>
-                  <span>{pathway.count}x</span>
-                </div>
+                <PathwaySummaryRow key={pathway.id} pathway={pathway} metric={`${pathway.count}x`} />
               ))}
             </SummaryList>
           </section>
@@ -1400,10 +1548,11 @@ function VisionPage(): React.JSX.Element {
             <h2 className="terminal-title">Drift and evasion</h2>
             <SummaryList empty="No drift or evasion patterns yet.">
               {[...report.sessionDrifts, ...report.blockEvasions].map((pathway) => (
-                <div className="terminal-list-row" key={pathway.id}>
-                  <span>{pathway.domains.join(" -> ")}</span>
-                  <span>{formatHistoryDuration(pathway.averageDiversionMs)}</span>
-                </div>
+                <PathwaySummaryRow
+                  key={pathway.id}
+                  pathway={pathway}
+                  metric={formatHistoryDuration(pathway.averageDiversionMs)}
+                />
               ))}
             </SummaryList>
           </section>
@@ -1660,6 +1809,442 @@ function VisionPage(): React.JSX.Element {
   );
 }
 
+interface ConfirmationState {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  confirmationText?: string;
+  inputLabel?: string;
+  run: (confirmationText: string) => Promise<void>;
+}
+
+function ConfirmationDialog({
+  state,
+  resetText,
+  onResetTextChange,
+  onCancel,
+  onConfirm
+}: {
+  state: ConfirmationState;
+  resetText: string;
+  onResetTextChange: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}): React.JSX.Element {
+  const requiredText = state.confirmationText;
+  const disabled = requiredText !== undefined && resetText.toLowerCase() !== requiredText;
+
+  return (
+    <div className="terminal-modal-overlay" role="presentation" onPointerDown={onCancel}>
+      <section
+        className="terminal-modal terminal-help-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <div className="terminal-help-header">
+          <h2 className="terminal-title" id="confirm-title">
+            {state.title}
+          </h2>
+          <button
+            className="terminal-help-close"
+            type="button"
+            aria-label="Close confirmation"
+            onClick={onCancel}
+          >
+            [x]
+          </button>
+        </div>
+        <p>{state.message}</p>
+        {requiredText ? (
+          <input
+            aria-label={state.inputLabel ?? "Confirmation text"}
+            placeholder={requiredText}
+            value={resetText}
+            onChange={(event) => onResetTextChange(event.target.value)}
+          />
+        ) : null}
+        <div className="terminal-actions">
+          <button className="terminal-button terminal-action-invert" type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            className="terminal-button terminal-action-invert"
+            type="button"
+            disabled={disabled}
+            onClick={onConfirm}
+          >
+            {state.confirmLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DataControlSection({
+  settings,
+  onSettingsChanged
+}: {
+  settings: ExtensionSettings | null;
+  onSettingsChanged: (settings: ExtensionSettings) => void;
+}): React.JSX.Element {
+  const [status, setStatus] = useState<DataControlStatus | null>(null);
+  const [importMode, setImportMode] = useState<DataImportMode>("merge");
+  const [deleteTarget, setDeleteTarget] =
+    useState<Exclude<DataDeleteTarget, "settings">>("browsing-history");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
+  const [resetText, setResetText] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const refreshDataControl = useCallback(async (): Promise<void> => {
+    const [nextStatus, nextSettings] = await Promise.all([
+      sendMessage<DataControlStatus>({ type: "GET_DATA_CONTROL_STATUS" }),
+      sendMessage<ExtensionSettings>({ type: "GET_SETTINGS" })
+    ]);
+    setStatus(nextStatus);
+    onSettingsChanged(nextSettings);
+  }, [onSettingsChanged]);
+
+  useEffect(() => {
+    refreshDataControl().catch((loadError) => {
+      setError(loadError instanceof Error ? loadError.message : "Unable to load local data.");
+    });
+  }, [refreshDataControl]);
+
+  useEffect(() => {
+    if (!notice) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setNotice(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  async function runDataAction(action: () => Promise<void>, success: string): Promise<void> {
+    try {
+      setNotice(null);
+      await action();
+      await refreshDataControl();
+      setNotice(success);
+      setError(null);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Data action failed.");
+    }
+  }
+
+  async function exportAllData(): Promise<void> {
+    await runDataAction(async () => {
+      downloadBackup(await sendMessage<DataExportResult>({ type: "EXPORT_ALL_DATA" }));
+    }, "Export prepared.");
+  }
+
+  async function importBackup(backup: DataBackup, mode: DataImportMode): Promise<void> {
+    await runDataAction(async () => {
+      await sendMessage<DataControlStatus>({
+        type: "IMPORT_DATA_BACKUP",
+        backup,
+        mode
+      });
+    }, mode === "replace" ? "Backup imported and replaced local data." : "Backup imported.");
+  }
+
+  async function readBackupFile(file: File): Promise<DataBackup> {
+    return JSON.parse(await file.text()) as DataBackup;
+  }
+
+  async function handleImportFile(file: File): Promise<void> {
+    try {
+      const backup = await readBackupFile(file);
+
+      if (importMode === "replace") {
+        setResetText("");
+        setConfirmation({
+          title: "Replace local data",
+          message:
+            "This replaces current 0wl data with the selected backup. Export first if you need a copy.",
+          confirmLabel: "Import Backup",
+          confirmationText: "confirm",
+          inputLabel: "Type confirm to import backup",
+          run: () => importBackup(backup, "replace")
+        });
+        return;
+      }
+
+      await importBackup(backup, "merge");
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Unable to import backup.");
+    }
+  }
+
+  function requestDelete(target: DataDeleteTarget, label: string): void {
+    setResetText("");
+    setConfirmation({
+      title: label,
+      message: `${label} affects only local data in this browser. Type confirm to continue.`,
+      confirmLabel: label,
+      confirmationText: "confirm",
+      inputLabel: `Type confirm to ${label.toLowerCase()}`,
+      run: async () => {
+        await runDataAction(async () => {
+          await sendMessage<DataControlStatus>({ type: "DELETE_LOCAL_DATA", target });
+        }, `${label} complete.`);
+      }
+    });
+  }
+
+  function requestResetAll(): void {
+    setResetText("");
+    setConfirmation({
+      title: "Reset All Local Data",
+      message:
+        "This permanently deletes all 0wl data stored in this browser. Type confirm to continue.",
+      confirmLabel: "Reset All Local Data",
+      confirmationText: "confirm",
+      inputLabel: "Type confirm to reset all local data",
+      run: async () => {
+        await runDataAction(async () => {
+          await sendMessage<DataControlStatus>({
+            type: "RESET_ALL_LOCAL_DATA",
+            confirmation: "RESET 0WL"
+          });
+        }, "All local data reset.");
+      }
+    });
+  }
+
+  function requestDangerExport(): void {
+    setResetText("");
+    setConfirmation({
+      title: "Export Data First",
+      message: "This prepares a local JSON backup before destructive actions. Type confirm to continue.",
+      confirmLabel: "Export Data First",
+      confirmationText: "confirm",
+      inputLabel: "Type confirm to export data first",
+      run: async () => {
+        await exportAllData();
+      }
+    });
+  }
+
+  function requestRetentionChange(value: string): void {
+    const historyRetentionDays = selectValueToRetention(value);
+    const label =
+      retentionOptions.find((option) => option.value === value)?.label ?? "the selected window";
+
+    if (historyRetentionDays === null) {
+      void runDataAction(async () => {
+        await sendMessage<DataControlStatus>({
+          type: "SET_HISTORY_RETENTION",
+          historyRetentionDays
+        });
+      }, "History retention updated.");
+      return;
+    }
+
+    setResetText("");
+    setConfirmation({
+      title: "Update History Retention",
+      message: `This keeps local history for ${label} and removes older local history records. Export first if you need a backup.`,
+      confirmLabel: "Save Retention",
+      confirmationText: "confirm",
+      inputLabel: "Type confirm to update retention",
+      run: async () => {
+        await runDataAction(async () => {
+          await sendMessage<DataControlStatus>({
+            type: "SET_HISTORY_RETENTION",
+            historyRetentionDays
+          });
+        }, "History retention updated.");
+      }
+    });
+  }
+
+  function closeConfirmation(): void {
+    setConfirmation(null);
+    setResetText("");
+  }
+
+  async function confirmAction(): Promise<void> {
+    if (!confirmation) {
+      return;
+    }
+
+    await confirmation.run(resetText);
+    closeConfirmation();
+  }
+
+  return (
+    <section className="terminal-data-control" aria-labelledby="data-control-title">
+      <h2 className="terminal-subheading" id="data-control-title">
+        Data Control
+      </h2>
+
+      <div className="terminal-data-grid">
+        <section className="terminal-subsection">
+          <h3>Local Data Status</h3>
+          <div className="terminal-list">
+            <div className="terminal-list-row">
+              <span>Storage used</span>
+              <span>{status ? formatBytes(status.storageUsedBytes) : "loading"}</span>
+            </div>
+            <div className="terminal-list-row">
+              <span>Oldest record</span>
+              <span>{status ? formatRecordDate(status.oldestRecordAt) : "loading"}</span>
+            </div>
+            <div className="terminal-list-row">
+              <span>Sessions</span>
+              <span>{status?.sessions ?? "loading"}</span>
+            </div>
+            <div className="terminal-list-row">
+              <span>Daily usage records</span>
+              <span>{status?.dailyUsageRecords ?? "loading"}</span>
+            </div>
+            <div className="terminal-list-row">
+              <span>Blocked attempts</span>
+              <span>{status?.blockedAttempts ?? "loading"}</span>
+            </div>
+            <div className="terminal-list-row">
+              <span>Vision events</span>
+              <span>{status?.visionEvents ?? "loading"}</span>
+            </div>
+            <div className="terminal-list-row">
+              <span>Site categories</span>
+              <span>
+                {status
+                  ? `${status.seedSiteCategories} seed / ${status.customSiteCategories} custom`
+                  : "loading"}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section className="terminal-subsection terminal-separated">
+          <h3>Backup</h3>
+          <p className="terminal-muted">Download or restore a local backup of your 0wl data.</p>
+          <div className="terminal-actions">
+            <button
+              className="terminal-button terminal-action-invert"
+              type="button"
+              onClick={() => void exportAllData()}
+            >
+              Export All Data
+            </button>
+            <button
+              className="terminal-button terminal-action-invert"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Import Backup
+            </button>
+          </div>
+          <div className="terminal-list-row">
+            <span>Import mode</span>
+            <TerminalSelect
+              ariaLabel="Import mode"
+              value={importMode}
+              options={[
+                { label: "Merge with existing data", value: "merge" },
+                { label: "Replace existing data", value: "replace" }
+              ]}
+              onChange={setImportMode}
+              width="min(100%, 18rem)"
+            />
+          </div>
+          <input
+            ref={fileInputRef}
+            hidden
+            type="file"
+            accept="application/json"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.currentTarget.value = "";
+
+              if (file) {
+                void handleImportFile(file);
+              }
+            }}
+          />
+        </section>
+
+        <section className="terminal-subsection terminal-separated">
+          <h3>History Retention</h3>
+          <div className="terminal-list-row">
+            <span>Keep history for</span>
+            <TerminalSelect
+              ariaLabel="History retention"
+              value={retentionToSelectValue(settings?.historyRetentionDays ?? null)}
+              options={retentionOptions}
+              onChange={requestRetentionChange}
+              width="min(100%, 13rem)"
+            />
+          </div>
+        </section>
+
+        <section className="terminal-subsection terminal-separated">
+          <h3>Delete Specific Data</h3>
+          <div className="terminal-input-row">
+            <TerminalSelect
+              ariaLabel="Data to clear"
+              value={deleteTarget}
+              options={deleteSpecificOptions}
+              onChange={setDeleteTarget}
+              width="min(100%, 22rem)"
+            />
+            <button
+              className="terminal-button terminal-action-invert"
+              type="button"
+              onClick={() => {
+                const selected = deleteSpecificOptions.find((option) => option.value === deleteTarget);
+                requestDelete(deleteTarget, selected?.label ?? "Clear Selected Data");
+              }}
+            >
+              Confirm
+            </button>
+          </div>
+        </section>
+
+        <section className="terminal-subsection terminal-danger-zone">
+          <h3>Danger Zone</h3>
+          <p>This permanently deletes all 0wl data stored in this browser.</p>
+          <div className="terminal-actions">
+            <button
+              className="terminal-button terminal-action-invert"
+              type="button"
+              onClick={requestDangerExport}
+            >
+              Export Data First
+            </button>
+            <button
+              className="terminal-button terminal-action-invert"
+              type="button"
+              onClick={requestResetAll}
+            >
+              Reset All Local Data
+            </button>
+          </div>
+        </section>
+      </div>
+
+      {notice ? <p className="terminal-muted">{notice}</p> : null}
+      {error ? <p className="terminal-error">{error}</p> : null}
+
+      {confirmation ? (
+        <ConfirmationDialog
+          state={confirmation}
+          resetText={resetText}
+          onResetTextChange={setResetText}
+          onCancel={closeConfirmation}
+          onConfirm={() => void confirmAction()}
+        />
+      ) : null}
+    </section>
+  );
+}
+
 function SettingsPage({
   settings,
   onSettingsChanged
@@ -1667,12 +2252,65 @@ function SettingsPage({
   settings: ExtensionSettings | null;
   onSettingsChanged: (settings: ExtensionSettings) => void;
 }): React.JSX.Element {
+  const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
+  const [resetText, setResetText] = useState("");
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsNotice, setSettingsNotice] = useState<string | null>(null);
+
   async function updateSettings(changes: SettingsChanges): Promise<void> {
     const next = await sendMessage<ExtensionSettings>({
       type: "UPDATE_SETTINGS",
       changes
     });
     onSettingsChanged(next);
+  }
+
+  function closeConfirmation(): void {
+    setConfirmation(null);
+    setResetText("");
+  }
+
+  async function requestResetSettings(): Promise<void> {
+    setResetText("");
+    setConfirmation({
+      title: "Reset Settings",
+      message: "This resets only 0wl settings in this browser. Type confirm to continue.",
+      confirmLabel: "Reset Settings",
+      confirmationText: "confirm",
+      inputLabel: "Type confirm to reset settings",
+      run: async () => {
+        await sendMessage<DataControlStatus>({
+          type: "DELETE_LOCAL_DATA",
+          target: "settings"
+        });
+        onSettingsChanged(await sendMessage<ExtensionSettings>({ type: "GET_SETTINGS" }));
+        setSettingsNotice("Settings reset.");
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (!settingsNotice) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setSettingsNotice(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [settingsNotice]);
+
+  async function confirmSettingsAction(): Promise<void> {
+    if (!confirmation) {
+      return;
+    }
+
+    try {
+      setSettingsNotice(null);
+      await confirmation.run(resetText);
+      setSettingsError(null);
+      closeConfirmation();
+    } catch (resetError) {
+      setSettingsError(resetError instanceof Error ? resetError.message : "Unable to reset settings.");
+    }
   }
 
   return (
@@ -1705,16 +2343,64 @@ function SettingsPage({
             onChange={(checked) => void updateSettings({ showBlockedAttemptCount: checked })}
           />
         </label>
+
+        <div className="terminal-list-row">
+          <span>Reset settings only</span>
+          <button
+            className="terminal-button terminal-action-invert"
+            type="button"
+            onClick={() => void requestResetSettings()}
+          >
+            Reset Settings
+          </button>
+        </div>
       </div>
+      {settingsError ? <p className="terminal-error">{settingsError}</p> : null}
+      {settingsNotice ? <p className="terminal-muted">{settingsNotice}</p> : null}
+      <DataControlSection settings={settings} onSettingsChanged={onSettingsChanged} />
+      {confirmation ? (
+        <ConfirmationDialog
+          state={confirmation}
+          resetText={resetText}
+          onResetTextChange={setResetText}
+          onCancel={closeConfirmation}
+          onConfirm={() => void confirmSettingsAction()}
+        />
+      ) : null}
     </section>
   );
 }
 
 function Dashboard(): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>("today");
+  const [tab, setTab] = useState<Tab>(() => readInitialTab());
+  const [brandMode, setBrandMode] = useState<"text" | "icon">(() => readInitialBrandMode());
+  const [brandHoverPaused, setBrandHoverPaused] = useState(false);
   const [summary, setSummary] = useState<TodaySummary | null>(null);
   const [settings, setSettings] = useState<ExtensionSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const selectTab = useCallback((nextTab: Tab): void => {
+    setTab(nextTab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", nextTab);
+    window.history.replaceState(null, "", url);
+  }, []);
+
+  const toggleBrandMode = useCallback((): void => {
+    const next = brandMode === "text" ? "icon" : "text";
+    setBrandMode(next);
+    setBrandHoverPaused(true);
+    window.localStorage.setItem(DASHBOARD_BRAND_MODE_STORAGE_KEY, next);
+  }, [brandMode]);
+
+  useEffect(() => {
+    if (!brandHoverPaused) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setBrandHoverPaused(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [brandHoverPaused]);
 
   useEffect(() => {
     let mounted = true;
@@ -1764,11 +2450,28 @@ function Dashboard(): React.JSX.Element {
     }
   }, [settings, summary, tab]);
 
+  const textBrand = <span className="terminal-brand-option terminal-brand-text">[0wl]</span>;
+  const iconBrand = (
+    <span className="terminal-brand-option terminal-brand-icon">
+      <img src={browser.runtime.getURL("/icons/w0wltb-32.png")} alt="0wl" />
+    </span>
+  );
+
   return (
     <main className="terminal-shell">
       <div className="terminal-frame">
         <header className="terminal-header">
-          <span>[0wl]</span>
+          <button
+            className={`terminal-brand-toggle ${brandHoverPaused ? "paused" : ""}`}
+            type="button"
+            aria-label="Toggle 0wl title"
+            onClick={toggleBrandMode}
+          >
+            {brandMode === "text" ? textBrand : iconBrand}
+            <span className="terminal-brand-hover" aria-hidden="true">
+              {brandMode === "text" ? iconBrand : textBrand}
+            </span>
+          </button>
           <nav className="terminal-tabs terminal-dashboard-tabs" aria-label="Dashboard sections">
             {(["today", "history", "blocked", "limits", "vision", "settings"] as const).map(
               (option) => (
@@ -1778,7 +2481,7 @@ function Dashboard(): React.JSX.Element {
                   type="button"
                   aria-label={option === "settings" ? "settings" : undefined}
                   title={option === "settings" ? "settings" : undefined}
-                  onClick={() => setTab(option)}
+                  onClick={() => selectTab(option)}
                 >
                   {option === "blocked"
                     ? "blocked sites"
@@ -1796,6 +2499,7 @@ function Dashboard(): React.JSX.Element {
         {error ? <section className="terminal-section terminal-error">{error}</section> : null}
         {content}
       </div>
+      {tab === "settings" ? <ExtensionFooter onTodayClick={() => selectTab("today")} /> : null}
     </main>
   );
 }

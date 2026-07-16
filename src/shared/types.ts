@@ -80,6 +80,8 @@ export interface TimeLimitedDomain {
   bypassUntil: number | null;
 }
 
+export type HistoryRetentionDays = 30 | 90 | 180 | 365 | null;
+
 export interface ExtensionSettings {
   schemaVersion: 1;
   trackingEnabled: boolean;
@@ -88,6 +90,7 @@ export interface ExtensionSettings {
   timeLimitedDomains: TimeLimitedDomain[];
   ignoredDomains: string[];
   showBlockedAttemptCount: boolean;
+  historyRetentionDays: HistoryRetentionDays;
   createdAt: number;
   updatedAt: number;
 }
@@ -183,6 +186,51 @@ export interface TimeLimitStatus {
   bypassUntil: number | null;
 }
 
+export interface DataControlStatus {
+  sessions: number;
+  dailyUsageRecords: number;
+  blockedAttempts: number;
+  visionEvents: number;
+  seedSiteCategories: number;
+  customSiteCategories: number;
+  oldestRecordAt: number | null;
+  storageUsedBytes: number;
+  historyRetentionDays: HistoryRetentionDays;
+}
+
+export type DataImportMode = "merge" | "replace";
+
+export type DataDeleteTarget =
+  | "browsing-history"
+  | "blocked-attempts"
+  | "vision-analytics"
+  | "custom-site-categories"
+  | "settings";
+
+export interface DataBackup {
+  app: "0wl";
+  schemaVersion: 1;
+  exportedAt: number;
+  version: string;
+  database: {
+    sessions: UsageSession[];
+    dailyUsage: DailyUsage[];
+    blockAttempts: BlockAttempt[];
+    domainTransitions: unknown[];
+    browsingIntents: unknown[];
+  };
+  storage: {
+    settings: ExtensionSettings | null;
+    visionSettings: VisionSettings | null;
+    visionDomainClassifications: unknown[];
+  };
+}
+
+export interface DataExportResult {
+  fileName: string;
+  backup: DataBackup;
+}
+
 export type MessageRequest =
   | { type: "GET_TODAY_SUMMARY" }
   | { type: "GET_HISTORY"; range: HistoryRange }
@@ -193,7 +241,10 @@ export type MessageRequest =
       changes: Partial<
         Pick<
           ExtensionSettings,
-          "trackingEnabled" | "idleThresholdSeconds" | "showBlockedAttemptCount"
+          | "trackingEnabled"
+          | "idleThresholdSeconds"
+          | "showBlockedAttemptCount"
+          | "historyRetentionDays"
         >
       >;
     }
@@ -245,6 +296,12 @@ export type MessageRequest =
       outcome: BrowsingIntentOutcome;
     }
   | { type: "GET_RUNTIME_STATE" }
+  | { type: "GET_DATA_CONTROL_STATUS" }
+  | { type: "EXPORT_ALL_DATA" }
+  | { type: "IMPORT_DATA_BACKUP"; backup: DataBackup; mode: DataImportMode }
+  | { type: "SET_HISTORY_RETENTION"; historyRetentionDays: HistoryRetentionDays }
+  | { type: "DELETE_LOCAL_DATA"; target: DataDeleteTarget }
+  | { type: "RESET_ALL_LOCAL_DATA"; confirmation: string }
   | { type: "GET_BLOCKED_ATTEMPT_COUNT"; domain: string }
   | { type: "RECORD_BLOCK_ATTEMPT"; domain: string };
 

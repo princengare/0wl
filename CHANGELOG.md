@@ -4,6 +4,16 @@ All notable changes to 0wl will be documented in this file.
 
 The project follows semantic versioning once public releases begin.
 
+## 0.1.4
+
+- Added Settings Data Control with local data status, JSON export, backup import, confirmed retention cleanup, specific delete actions, and typed full-reset confirmation.
+- Added background data-control messaging and backup handling without using blanket storage clears or database deletion.
+- Added `0wl · icon` footers to Settings, blocked-site, time-limit, and friction interstitial pages.
+- Added dashboard `[0wl]` title/icon toggle with remembered local UI preference.
+- Improved Data Control and confirmation UI with `[x]` popup close controls, inverted hover action buttons, dropdown-based specific deletes, and auto-clearing status messages.
+- Improved Vision pathway, drift, and evasion summaries with repeated-domain collapse, research/dev-loop compression, display caps, occurrence thresholds, and intervention-gated evasion detection.
+- Marked 0.1.4 as the Mozilla-approved Firefox Add-ons release in documentation.
+
 ## 0.1.3
 
 - Migrated the extension build system to WXT while preserving the existing Firefox extension ID and local storage model.

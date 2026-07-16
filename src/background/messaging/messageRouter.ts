@@ -1,5 +1,6 @@
 import type { BlockRuleManager } from "../blocking/BlockRuleManager";
 import type { BlockAttemptRecorder } from "../blocking/BlockAttemptRecorder";
+import type { DataControlService } from "../dataControl/DataControlService";
 import type { TimeLimitManager } from "../timeLimits/TimeLimitManager";
 import type { TrackingEngine } from "../tracking/TrackingEngine";
 import type { BlockAttemptRepository } from "@/db/repositories/BlockAttemptRepository";
@@ -45,6 +46,7 @@ interface MessageRouterDependencies {
   frictionRuleManager: FrictionRuleManager;
   intentPromptManager: IntentPromptManager;
   visionReportService: VisionReportService;
+  dataControlService: DataControlService;
   now?: () => number;
 }
 
@@ -209,7 +211,8 @@ async function routeMessage(
         {
           trackingEnabled: message.changes.trackingEnabled,
           idleThresholdSeconds: message.changes.idleThresholdSeconds,
-          showBlockedAttemptCount: message.changes.showBlockedAttemptCount
+          showBlockedAttemptCount: message.changes.showBlockedAttemptCount,
+          historyRetentionDays: message.changes.historyRetentionDays
         },
         dependencies.now?.() ?? Date.now()
       );
@@ -425,6 +428,26 @@ async function routeMessage(
 
     case "GET_RUNTIME_STATE":
       return ok(await dependencies.runtimeStateStore.get(dependencies.now?.() ?? Date.now()));
+
+    case "GET_DATA_CONTROL_STATUS":
+      return ok(await dependencies.dataControlService.getStatus());
+
+    case "EXPORT_ALL_DATA":
+      return ok(await dependencies.dataControlService.exportAllData());
+
+    case "IMPORT_DATA_BACKUP":
+      return ok(await dependencies.dataControlService.importBackup(message.backup, message.mode));
+
+    case "SET_HISTORY_RETENTION":
+      return ok(
+        await dependencies.dataControlService.setHistoryRetention(message.historyRetentionDays)
+      );
+
+    case "DELETE_LOCAL_DATA":
+      return ok(await dependencies.dataControlService.deleteTarget(message.target));
+
+    case "RESET_ALL_LOCAL_DATA":
+      return ok(await dependencies.dataControlService.resetAllLocalData(message.confirmation));
 
     case "GET_BLOCKED_ATTEMPT_COUNT":
       return ok(await dependencies.blockAttemptRecorder.countToday(message.domain));

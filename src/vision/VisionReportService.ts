@@ -61,7 +61,7 @@ export class VisionReportService {
     const heatmap = new BlockAttemptHeatmapAnalyzer().analyze(attempts);
     const blockOutcomes = new BlockOutcomeAnalyzer().analyze(attempts, sessions, classifications);
     const bounceBackRate = new BounceBackAnalyzer().rate(blockOutcomes);
-    const blockEvasions = new BlockEvasionDetector().detect(attemptChains);
+    const blockEvasions = new BlockEvasionDetector().detect(attempts, sessions, classifications);
     const substitutions = new SubstitutionDetector().detect(
       settings.blockedDomains,
       sessions,

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { tryNormalizeDomain } from "@/shared/domain";
+import { ExtensionFooter } from "@/shared/ExtensionFooter";
 import { sendMessage } from "@/shared/messagingClient";
 import { formatDurationHuman, formatDurationMinutes } from "@/shared/time";
 import { isTrackableUrl } from "@/shared/url";
@@ -94,6 +95,7 @@ function LimitPage(): React.JSX.Element {
           {error ? <p className="terminal-error">{error}</p> : null}
         </div>
       </section>
+      <ExtensionFooter />
     </main>
   );
 }

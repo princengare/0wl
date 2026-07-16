@@ -64,6 +64,21 @@ It does not store browsing history, visited URLs, page titles, blocked attempts,
 
 Firefox, Chrome, Edge, Opera, and Safari each keep their own extension storage. Safari data does not automatically import Firefox or Chromium data. 0wl does not add cloud sync or account-based transfer.
 
+## Data Control
+
+Version `0.1.4` adds a Settings Data Control section for local backup and cleanup.
+
+Data Control can:
+
+- show local counts and storage status
+- export a local JSON backup
+- import a backup by merge or confirmed replace
+- set history retention, defaulting to `Forever`
+- clear selected local data categories after typed confirmation
+- reset settings or all local data only after confirmation
+
+These actions operate on local extension storage in the current browser. They do not add cloud sync, accounts, telemetry, or remote backup.
+
 ## Update Safety Rules
 
 On update or reload:

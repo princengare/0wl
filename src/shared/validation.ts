@@ -30,6 +30,12 @@ export function isValidTimeLimitMinutes(value: unknown): value is number {
   );
 }
 
+export function isValidHistoryRetentionDays(
+  value: unknown
+): value is ExtensionSettings["historyRetentionDays"] {
+  return value === 30 || value === 90 || value === 180 || value === 365 || value === null;
+}
+
 export function isString(value: unknown): value is string {
   return typeof value === "string";
 }

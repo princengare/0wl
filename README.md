@@ -8,9 +8,9 @@ Project site: https://princengare.github.io/0wl/
 
 Firefox Add-ons listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
 
-Current codebase release: `0.1.3`
+Current codebase release: `0.1.4`
 
-Latest Mozilla-approved listing before the 0.1.3 submission: `0.1.2`
+Current Mozilla-approved listing: `0.1.4`
 
 0wl aesthetic note:
 
@@ -20,6 +20,10 @@ Latest Mozilla-approved listing before the 0.1.3 submission: `0.1.2`
 - Dashboard header tabs stay on one horizontal line, with Settings shown as the bracketed gear control.
 - Vision section headings are smaller and denser to match the rest of the dashboard.
 - The History average line alignment was tightened so it sits at the computed chart value.
+- Settings and interstitial pages now include the `0wl · icon` footer, with the icon opening the dashboard Today view.
+- The dashboard `[0wl]` title can toggle into the 0wl icon, preview the alternate state on hover, pause that hover preview briefly after a click, and remember that local UI choice.
+- Data Control actions use terminal-style confirmation popups with `[x]` close controls, inverted action-button hover states, and short-lived status messages.
+- Vision pathways now compress repeated domains and research/dev loops into short behavioral summaries instead of long raw domain chains.
 - These changes make the UI more consistent with the 0wl aesthetic.
 
 ## Open Source and Repository Safety
@@ -369,7 +373,7 @@ Click `Continue Anyway` to bypass the limit for 15 minutes and return to the sit
 
 Use `vision` to review local behavioral patterns and tune site categories.
 
-Version `0.1.3` adds the first local intelligence layer:
+Version `0.1.3` added the first local intelligence layer:
 
 - Seed domain categories for focus, coding, school, research, communication, neutral, mixed, entertainment, social, and distraction sites.
 - User category overrides stored locally in `browser.storage.local`.
@@ -385,6 +389,15 @@ Version `0.1.3` adds the first local intelligence layer:
 - Local behavior-based recommendations.
 - Scheduled friction rules.
 - Intent prompt records for friction pages.
+
+Version `0.1.4` improves Vision summaries:
+
+- Repeated same-domain runs are collapsed.
+- Research/dev/search/docs/AI-tool loops are grouped before the first distraction.
+- Recurring pathways are shown only after meaningful occurrence thresholds.
+- Long raw chains are kept out of the main UI and moved into expandable details.
+- Drift is shown as compressed context-to-distraction movement.
+- Evasion is tied to actual block or intervention events rather than ordinary browsing alone.
 
 The `vision` page has four tabs:
 
@@ -426,6 +439,8 @@ Use `Settings` to control:
 - `Tracking enabled`: turns tracking on or off.
 - `Idle threshold`: controls how long the system must be inactive before tracking stops.
 - `Show blocked attempt counts`: controls whether the blocked page shows today’s attempt count.
+- `History retention`: controls how long local history is retained, with `Forever` as the default.
+- `Reset Settings`: resets only 0wl settings after typed confirmation.
 
 Idle threshold options:
 
@@ -435,6 +450,71 @@ Idle threshold options:
 - `5 minutes`
 
 Changing the idle threshold updates browser idle detection immediately where the API is supported.
+
+Settings also includes `Data Control`.
+
+Local Data Status shows what is stored locally:
+
+- Storage used.
+- Oldest record.
+- Session count.
+- Daily usage record count.
+- Blocked attempt count.
+- Vision event count.
+- Seed and custom site category counts.
+
+Backup actions:
+
+- `Export All Data`: downloads a local JSON backup such as `0wl-backup-2026-07-15.json`.
+- `Import Backup`: restores a local backup.
+- Import defaults to `Merge with existing data`.
+- `Replace existing data` requires confirmation before import.
+
+Delete Specific Data actions:
+
+- Choose the local data category from a dropdown.
+- Press `Confirm`.
+- Type `confirm` in the confirmation popup before the action runs.
+- Confirmation popups include `[x]` and can also be dismissed by clicking outside the popup.
+- Success messages clear after four seconds.
+
+Available specific delete targets:
+
+- `Delete Browsing History`
+- `Delete Blocked Attempts`
+- `Delete Vision Analytics`
+- `Reset Custom Site Categories`
+
+Danger Zone:
+
+- `Export Data First`
+- `Reset All Local Data`
+
+Danger Zone actions require typing:
+
+```text
+confirm
+```
+
+Data-control actions operate only on local extension storage in the current browser. They do not add accounts, cloud sync, telemetry, or remote backup.
+
+### Footer
+
+The Settings page and extension-owned interstitial pages include:
+
+```text
+0wl · (icon)
+```
+
+The footer sits outside the bordered frame in the black margin. The footer icon opens the dashboard Today page.
+
+Interstitial pages with the footer:
+
+- Blocked-site page
+- Time-limit page
+- Friction/intervention page
+
+In the dashboard header, clicking `[0wl]` toggles the title into the 0wl icon. Clicking the icon toggles it back to `[0wl]`. Hovering shows the other option without a highlight. The choice is remembered locally when returning to the dashboard.
 
 ## Function Reference
 
@@ -456,6 +536,15 @@ Changing the idle threshold updates browser idle detection immediately where the
 | Terminal checkbox controls             | Dashboard                | Uses bracket-style `[ ]` and `[✓]` controls with underline hover/focus feedback.                         |
 | Terminal dropdown controls             | Dashboard                | Uses custom black-and-white dropdown menus that close after selection.                                   |
 | Bundled terminal font                  | Extension UI, Docs       | Uses bundled JetBrains Mono with `ss01` and slashed-zero OpenType features.                              |
+| Dashboard brand toggle                 | Dashboard                | Toggles `[0wl]` into the 0wl icon and remembers the local UI choice.                                     |
+| Settings/interstitial footer           | Dashboard, Pages         | Shows `0wl · icon`; the icon opens the dashboard Today view.                                             |
+| Local data status                      | Dashboard                | Shows local counts, oldest record, storage used, and site-category totals.                               |
+| Export all data                        | Dashboard                | Downloads a local JSON backup of 0wl data.                                                              |
+| Import backup                          | Dashboard, Background    | Imports a local 0wl backup by merge or confirmed replace.                                                |
+| History retention setting              | Dashboard, Background    | Stores the user's retention window and prunes older local history after confirmation.                    |
+| Delete specific data                   | Dashboard, Background    | Deletes selected local categories after confirmation.                                                    |
+| Reset all local data                   | Dashboard, Background    | Requires typed `confirm` in the dashboard before deleting all local 0wl data in this browser.             |
+| Vision pathway compression             | Dashboard                | Shows concise behavioral summaries with raw domains and metadata in expandable details.                  |
 | Add blocked domain                     | Dashboard                | Normalizes input, rejects duplicates, saves settings, and installs an active dynamic DNR redirect rule.  |
 | Schedule blocked domain                | Dashboard                | Applies blocking always or only during selected local days and times.                                    |
 | Pause/resume blocked domain            | Dashboard                | Enables or disables a saved blocked domain and syncs DNR rules.                                          |
@@ -497,7 +586,7 @@ The React pages communicate with the background through typed `browser.runtime.s
 | `GET_HISTORY`                     | Dashboard               | `HistorySessionView[]`   | Returns completed sessions for `today`, `yesterday`, or the active history range.             |
 | `GET_HISTORY_INTERVAL`            | Dashboard               | `HistorySessionView[]`   | Returns raw sessions overlapping an exact local-time interval, used for calendar weeks.       |
 | `GET_SETTINGS`                    | Dashboard, Blocked page | `ExtensionSettings`      | Returns extension settings from `browser.storage.local`.                                      |
-| `UPDATE_SETTINGS`                 | Dashboard               | `ExtensionSettings`      | Updates tracking, idle threshold, or attempt-count visibility.                                |
+| `UPDATE_SETTINGS`                 | Dashboard               | `ExtensionSettings`      | Updates tracking, idle threshold, attempt-count visibility, or history retention.              |
 | `ADD_BLOCKED_DOMAIN`              | Dashboard               | `ExtensionSettings`      | Normalizes and adds a blocked domain with an optional schedule, then syncs DNR rules.         |
 | `REMOVE_BLOCKED_DOMAIN`           | Dashboard               | `ExtensionSettings`      | Removes a blocked domain and syncs DNR rules.                                                 |
 | `SET_BLOCKED_DOMAIN_ENABLED`      | Dashboard               | `ExtensionSettings`      | Enables or pauses a blocked domain and syncs DNR rules.                                       |
@@ -518,6 +607,12 @@ The React pages communicate with the background through typed `browser.runtime.s
 | `REMOVE_FRICTION_RULE`            | Dashboard               | `VisionReport`           | Removes a scheduled friction rule.                                                            |
 | `RECORD_BROWSING_INTENT`          | Friction page           | `BrowsingIntent`         | Records a validated local browsing-intent outcome.                                            |
 | `GET_RUNTIME_STATE`               | Internal/debug use      | `PersistedTrackingState` | Returns current persisted runtime tracking state.                                             |
+| `GET_DATA_CONTROL_STATUS`         | Dashboard               | `DataControlStatus`      | Returns local data counts, oldest record, storage estimate, and retention setting.             |
+| `EXPORT_ALL_DATA`                 | Dashboard               | `DataExportResult`       | Returns a JSON backup payload and backup filename for local download.                          |
+| `IMPORT_DATA_BACKUP`              | Dashboard               | `DataControlStatus`      | Imports a valid 0wl backup by merge or confirmed replace.                                     |
+| `SET_HISTORY_RETENTION`           | Dashboard               | `DataControlStatus`      | Saves the retention window and prunes older local history after confirmation.                  |
+| `DELETE_LOCAL_DATA`               | Dashboard               | `DataControlStatus`      | Deletes one confirmed local data category and refreshes enforcement.                           |
+| `RESET_ALL_LOCAL_DATA`            | Dashboard               | `DataControlStatus`      | Resets all local 0wl data through a typed dashboard confirmation flow.                          |
 | `GET_BLOCKED_ATTEMPT_COUNT`       | Blocked page            | `number`                 | Returns today’s blocked-attempt count for a validated domain.                                 |
 | `RECORD_BLOCK_ATTEMPT`            | Blocked page            | `BlockAttempt`           | Validates the domain is currently blocked and records a local attempt.                        |
 
@@ -612,7 +707,7 @@ The manifest declares:
 
 ## Features to Be Added
 
-Note: version `0.1.3` implements the first deterministic, local-only version of the behavioral intelligence features below inside the new `vision` dashboard tab. The roadmap remains here to track future refinement, richer UI, and deeper analysis.
+Note: version `0.1.3` implemented the first deterministic, local-only Vision tab. Version `0.1.4` refines pathway, drift, and evasion summaries so the main UI shows concise behavioral patterns while raw details remain available for inspection. The roadmap remains here to track future refinement, richer UI, and deeper analysis.
 
 ### Attention Bucket Differentiation
 
@@ -717,189 +812,6 @@ Default behavior should be:
 - Let users opt into counting PiP/background media toward time limits.
 
 For 0wl's goals, active browsing time should mean where the user's main browser attention is. PiP and background media still matter, but they should remain separate metrics.
-
-### Settings and Interstitial Footers
-
-Add a small terminal-style footer to the Settings page and extension-owned interstitial pages.
-
-Planned locations:
-
-- Settings page
-- Blocked-site page
-- Time-limit page
-- Friction/intervention pages
-
-The footer should stay minimal, local-first, and consistent with the 0wl aesthetic. It can link to privacy, data control, project information, or local help pages without adding telemetry, accounts, or cloud features.
-
-### Recommended Data Control
-
-Add a Settings data-control section that helps users understand, export, import, retain, and delete local 0wl data.
-
-#### Data Status
-
-Show what is stored locally so users can see what 0wl keeps in their browser.
-
-Example:
-
-```text
-Data stored locally:
-Sessions: 1,284
-Daily usage records: 93
-Blocked attempts: 47
-Vision events: 112
-Site categories: 846 seed / 12 custom
-Oldest record: Jan 12, 2026
-Storage used: 8.4 MB
-```
-
-This should build trust by making local storage visible and understandable.
-
-#### Export Data
-
-Make export prominent.
-
-```text
-Export Data
-Download a local backup of your 0wl data.
-```
-
-Initial action:
-
-```text
-[ Export All Data ]
-```
-
-Future export options:
-
-- Export everything
-- Export browsing sessions only
-- Export settings only
-- Export Vision analytics only
-- CSV export for history
-
-Initial backup filename format:
-
-```text
-0wl-backup-2026-07-14.json
-```
-
-#### Import Data
-
-Support restoring data when reinstalling 0wl or moving browsers.
-
-```text
-Import Data
-Restore 0wl data from a backup file.
-```
-
-Import modes:
-
-- Merge with existing data
-- Replace existing data
-
-Default behavior should be:
-
-- Merge with existing data
-- Require confirmation before replacing existing data
-
-#### Retention Settings
-
-Let users decide how long 0wl keeps history.
-
-```text
-Keep browsing history for:
-[ 30 days ]
-[ 90 days ]
-[ 6 months ]
-[ 1 year ]
-[ Forever ]
-```
-
-Recommended default:
-
-- `1 year`
-
-Vision and pattern features need enough history to be useful, so the default should not be too short.
-
-#### Delete Specific Data
-
-Offer precise deletion controls instead of only one full reset.
-
-Recommended actions:
-
-```text
-[ Delete Browsing History ]
-[ Delete Blocked Attempt History ]
-[ Delete Vision Analytics ]
-[ Reset Custom Site Categories ]
-[ Reset Settings ]
-```
-
-These actions should sit behind confirmation modals.
-
-#### Danger Zone
-
-Keep full reset separate and explicit.
-
-```text
-Danger Zone
-
-Reset All Local Data
-This permanently deletes all 0wl data stored in this browser.
-This cannot be undone.
-
-[ Export Data First ]
-[ Reset All Local Data ]
-```
-
-Require the user to type:
-
-```text
-RESET 0WL
-```
-
-before enabling the final reset button.
-
-#### Ideal Settings Layout
-
-```text
-Data Control
-
-Local Data Status
-- Storage used: 8.4 MB
-- Oldest record: Jan 12, 2026
-- Sessions: 1,284
-- Blocked attempts: 47
-- Vision events: 112
-
-Backup
-[ Export All Data ]
-[ Import Backup ]
-
-History Retention
-Keep history for: [ 1 year v ]
-
-Delete Specific Data
-[ Delete Browsing History ]
-[ Delete Blocked Attempts ]
-[ Delete Vision Analytics ]
-[ Reset Custom Site Categories ]
-[ Reset Settings ]
-
-Danger Zone
-[ Export Data First ]
-[ Reset All Local Data ]
-```
-
-Avoid for now:
-
-- cloud sync
-- account backup
-- automatic remote backup
-- share data
-- telemetry toggle
-
-0wl's privacy pitch is local-first, so these controls should keep everything local.
 
 ### Distraction Pathways
 
@@ -1445,6 +1357,7 @@ Example release progression:
 0.1.0  Initial tracker
 0.2.0  Blocking improvements
 0.1.3  Vision insights, WXT cross-browser builds, and UI consistency with the 0wl aesthetic
+0.1.4  Mozilla-approved Settings data control, local backups, 0wl footers, and concise Vision summaries
 0.3.0  Expanded behavioral intelligence
 1.0.0  Stable public release
 ```

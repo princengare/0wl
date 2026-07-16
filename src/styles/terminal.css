@@ -224,9 +224,44 @@ select option {
   overflow-x: auto;
 }
 
-.terminal-header > span,
+.terminal-brand-toggle,
 .terminal-dashboard-tabs {
   flex: 0 0 auto;
+}
+
+.terminal-brand-toggle {
+  display: inline-grid;
+  min-width: 4.5rem;
+  min-height: 2.6rem;
+  place-items: center;
+  color: #f7f7f7;
+  background: transparent;
+}
+
+.terminal-brand-toggle:hover,
+.terminal-brand-toggle:focus-visible {
+  background: transparent;
+  outline: none;
+}
+
+.terminal-brand-hover {
+  display: none;
+}
+
+.terminal-brand-toggle:not(.paused):hover > .terminal-brand-option {
+  display: none;
+}
+
+.terminal-brand-toggle:not(.paused):hover .terminal-brand-hover {
+  display: inline-grid;
+  place-items: center;
+}
+
+.terminal-brand-toggle img,
+.terminal-brand-icon img {
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
 }
 
 .terminal-section + .terminal-section {
@@ -265,6 +300,20 @@ select option {
 .terminal-button:hover,
 .terminal-link:hover {
   text-decoration: underline;
+}
+
+.terminal-action-invert:not(:disabled):hover,
+.terminal-action-invert:not(:disabled):focus-visible,
+.terminal-data-control .terminal-button:not(:disabled):hover,
+.terminal-data-control .terminal-button:not(:disabled):focus-visible,
+.terminal-modal .terminal-button:not(:disabled):hover,
+.terminal-modal .terminal-button:not(:disabled):focus-visible,
+.terminal-week-button:not(:disabled):hover,
+.terminal-week-button:not(:disabled):focus-visible {
+  color: #000000;
+  background: #f7f7f7;
+  outline: none;
+  text-decoration: none;
 }
 
 .terminal-muted {
@@ -453,7 +502,9 @@ label.terminal-list-row:has(.terminal-checkbox):focus-within .terminal-checkbox-
 .terminal-centered {
   min-height: 100vh;
   display: grid;
+  align-content: center;
   place-items: center;
+  gap: 1rem;
   padding: clamp(1rem, 5vw, 3rem);
   text-align: center;
 }
@@ -712,6 +763,10 @@ label.terminal-list-row:has(.terminal-checkbox):focus-within .terminal-checkbox-
   margin-top: 1rem;
 }
 
+.terminal-history-panel {
+  cursor: pointer;
+}
+
 .terminal-week-nav {
   display: flex;
   align-items: center;
@@ -732,6 +787,49 @@ label.terminal-list-row:has(.terminal-checkbox):focus-within .terminal-checkbox-
 .terminal-vision-grid .terminal-title {
   font-size: clamp(0.95rem, 1.6vw, 1.1rem);
   margin-bottom: 0.25rem;
+}
+
+.terminal-pathway-details {
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.35);
+  padding-bottom: 0.45rem;
+}
+
+.terminal-pathway-details summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.terminal-pathway-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.terminal-pathway-details summary::before {
+  content: "[+]";
+  flex: 0 0 auto;
+  color: #b8b8b8;
+}
+
+.terminal-pathway-details[open] summary::before {
+  content: "[-]";
+}
+
+.terminal-pathway-details summary:hover,
+.terminal-pathway-details summary:focus-visible {
+  color: #000000;
+  background: #f7f7f7;
+  outline: none;
+}
+
+.terminal-pathway-details summary:hover::before,
+.terminal-pathway-details summary:focus-visible::before {
+  color: #000000;
+}
+
+.terminal-pathway-metadata {
+  margin-top: 0.65rem;
+  padding-left: 1.75rem;
+  color: #b8b8b8;
+  font-size: 0.85rem;
 }
 
 .terminal-help-overlay {
@@ -800,6 +898,105 @@ label.terminal-list-row:has(.terminal-checkbox):focus-within .terminal-checkbox-
 .terminal-help-grid p {
   margin: 0;
   color: #b8b8b8;
+}
+
+.terminal-data-control {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.15rem;
+  padding-top: 1.15rem;
+  border-top: 2px solid #f7f7f7;
+}
+
+.terminal-subheading {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1rem, 1.8vw, 1.2rem);
+  font-weight: 400;
+}
+
+.terminal-data-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.terminal-subsection {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.terminal-separated {
+  border-top: 1px solid #f7f7f7;
+  padding-top: 0.7rem;
+}
+
+.terminal-subsection h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.terminal-actions-wrap {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.terminal-danger-zone {
+  border-top: 1px solid #f7f7f7;
+  padding-top: 0.7rem;
+}
+
+.terminal-brand-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: min(100%, 920px);
+  margin: 0.85rem auto 0;
+  padding: 0;
+  border: 0;
+}
+
+.terminal-icon-button {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  color: #f7f7f7;
+}
+
+.terminal-icon-button:hover,
+.terminal-icon-button:focus-visible {
+  background: transparent;
+  outline: none;
+}
+
+.terminal-icon-button img {
+  width: 1.45rem;
+  height: 1.45rem;
+  object-fit: contain;
+}
+
+.terminal-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 5vw, 3rem);
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.terminal-modal {
+  width: min(100%, 560px);
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #f7f7f7;
+  background: #000000;
+}
+
+.terminal-modal .terminal-title {
+  margin: 0;
 }
 
 @media (max-width: 640px) {

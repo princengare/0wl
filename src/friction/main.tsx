@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { ExtensionFooter } from "@/shared/ExtensionFooter";
 import { sendMessage } from "@/shared/messagingClient";
 import type { FrictionLevel } from "@/vision/types";
 import "@/styles/terminal.css";
@@ -59,52 +60,55 @@ function FrictionPage(): React.JSX.Element {
 
   return (
     <main className="terminal-centered">
-      <section className="terminal-frame terminal-blocked-body">
-        <h1 className="terminal-title">
-          {level === 4 ? "SITE BLOCKED" : level === 2 ? "DECLARE INTENT" : "PAUSE"}
-        </h1>
-        <p>{domain}</p>
-        <p className="terminal-muted">
-          {level === 4
-            ? "This site is under a hard 0wl friction rule."
-            : "This pause is local and configured inside 0wl vision."}
-        </p>
+      <section className="terminal-frame">
+        <div className="terminal-blocked-body">
+          <h1 className="terminal-title">
+            {level === 4 ? "SITE BLOCKED" : level === 2 ? "DECLARE INTENT" : "PAUSE"}
+          </h1>
+          <p>{domain}</p>
+          <p className="terminal-muted">
+            {level === 4
+              ? "This site is under a hard 0wl friction rule."
+              : "This pause is local and configured inside 0wl vision."}
+          </p>
 
-        {level === 2 ? (
-          <div className="terminal-list" style={{ width: "min(100%, 520px)" }}>
-            {["Search for a tutorial", "Reply to someone", "Post something", "Browse"].map(
-              (option) => (
-                <button
-                  className="terminal-button"
-                  key={option}
-                  type="button"
-                  onClick={() => void continueToSite(option)}
-                >
-                  {option}
-                </button>
-              )
-            )}
-            <input
-              aria-label="Custom intent"
-              placeholder="Other..."
-              value={intent}
-              onChange={(event) => setIntent(event.target.value)}
-            />
-          </div>
-        ) : null}
+          {level === 2 ? (
+            <div className="terminal-list" style={{ width: "min(100%, 520px)" }}>
+              {["Search for a tutorial", "Reply to someone", "Post something", "Browse"].map(
+                (option) => (
+                  <button
+                    className="terminal-button"
+                    key={option}
+                    type="button"
+                    onClick={() => void continueToSite(option)}
+                  >
+                    {option}
+                  </button>
+                )
+              )}
+              <input
+                aria-label="Custom intent"
+                placeholder="Other..."
+                value={intent}
+                onChange={(event) => setIntent(event.target.value)}
+              />
+            </div>
+          ) : null}
 
-        {level === 4 ? null : remaining > 0 ? (
-          <p>Continue available in {remaining} seconds</p>
-        ) : (
-          <button className="terminal-button" type="button" onClick={() => void continueToSite()}>
-            Continue
+          {level === 4 ? null : remaining > 0 ? (
+            <p>Continue available in {remaining} seconds</p>
+          ) : (
+            <button className="terminal-button" type="button" onClick={() => void continueToSite()}>
+              Continue
+            </button>
+          )}
+
+          <button className="terminal-button" type="button" onClick={() => window.history.back()}>
+            Go Back
           </button>
-        )}
-
-        <button className="terminal-button" type="button" onClick={() => window.history.back()}>
-          Go Back
-        </button>
+        </div>
       </section>
+      <ExtensionFooter />
     </main>
   );
 }

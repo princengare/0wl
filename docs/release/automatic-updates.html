@@ -23,9 +23,8 @@
         <section class="section hero">
           <h1>automatic updates</h1>
           <p class="summary">
-            0wl 0.1.2 is approved on Mozilla Add-ons. The 0.1.3 source target can be submitted as
-            the next reviewed version. Permanent Firefox installs can update through AMO or a signed
-            self-hosted release channel.
+            0wl 0.1.4 is approved on Mozilla Add-ons. Permanent Firefox installs can update through
+            AMO or a signed self-hosted release channel.
           </p>
           <div class="actions">
             <a class="button" href="https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/"
@@ -44,7 +43,7 @@
 
         <section class="section stack">
           <h2>self-hosted path</h2>
-          <pre><code>UPDATE_BASE_URL="https://downloads.example.org/0wl" XPI_FILE="0wl-0.1.3.xpi" npm run updates:manifest</code></pre>
+          <pre><code>UPDATE_BASE_URL="https://downloads.example.org/0wl" XPI_FILE="0wl-0.1.4.xpi" npm run updates:manifest</code></pre>
           <p>
             Host the signed XPI and generated <code>updates.json</code> over HTTPS, then ship a real
             <code>gecko.update_url</code>.

@@ -23,6 +23,7 @@ export function createDefaultSettings(now: number): ExtensionSettings {
     timeLimitedDomains: [],
     ignoredDomains: [],
     showBlockedAttemptCount: true,
+    historyRetentionDays: null,
     createdAt: now,
     updatedAt: now
   };

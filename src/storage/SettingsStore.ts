@@ -9,7 +9,12 @@ import type {
   TimeLimitedDomain
 } from "@/shared/types";
 import { DEFAULT_IDLE_THRESHOLD_SECONDS } from "@/shared/constants";
-import { isPlainObject, isValidIdleThreshold, isValidTimeLimitMinutes } from "@/shared/validation";
+import {
+  isPlainObject,
+  isValidHistoryRetentionDays,
+  isValidIdleThreshold,
+  isValidTimeLimitMinutes
+} from "@/shared/validation";
 
 type StorageArea = browser.storage.StorageArea;
 
@@ -230,6 +235,9 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
     : DEFAULT_IDLE_THRESHOLD_SECONDS;
   const showBlockedAttemptCount =
     typeof value.showBlockedAttemptCount === "boolean" ? value.showBlockedAttemptCount : true;
+  const historyRetentionDays = isValidHistoryRetentionDays(value.historyRetentionDays)
+    ? value.historyRetentionDays
+    : null;
   const createdAt = isFiniteNumber(value.createdAt) ? value.createdAt : now;
   const updatedAt = isFiniteNumber(value.updatedAt) ? value.updatedAt : now;
   const changed =
@@ -239,6 +247,7 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
     trackingEnabled !== value.trackingEnabled ||
     idleThresholdSeconds !== value.idleThresholdSeconds ||
     showBlockedAttemptCount !== value.showBlockedAttemptCount ||
+    historyRetentionDays !== value.historyRetentionDays ||
     createdAt !== value.createdAt ||
     updatedAt !== value.updatedAt;
 
@@ -251,6 +260,7 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
       timeLimitedDomains: limited.timeLimitedDomains,
       ignoredDomains: ignored.ignoredDomains,
       showBlockedAttemptCount,
+      historyRetentionDays,
       createdAt,
       updatedAt
     },
@@ -296,7 +306,11 @@ export class SettingsStore {
     changes: Partial<
       Pick<
         ExtensionSettings,
-        "trackingEnabled" | "idleThresholdSeconds" | "showBlockedAttemptCount" | "ignoredDomains"
+        | "trackingEnabled"
+        | "idleThresholdSeconds"
+        | "showBlockedAttemptCount"
+        | "ignoredDomains"
+        | "historyRetentionDays"
       >
     >,
     now = Date.now()
@@ -304,10 +318,21 @@ export class SettingsStore {
     const current = await this.get(now);
     const next: ExtensionSettings = {
       ...current,
-      ...changes,
+      trackingEnabled:
+        typeof changes.trackingEnabled === "boolean"
+          ? changes.trackingEnabled
+          : current.trackingEnabled,
       idleThresholdSeconds: isValidIdleThreshold(changes.idleThresholdSeconds)
         ? changes.idleThresholdSeconds
         : current.idleThresholdSeconds,
+      ignoredDomains: changes.ignoredDomains ?? current.ignoredDomains,
+      showBlockedAttemptCount:
+        typeof changes.showBlockedAttemptCount === "boolean"
+          ? changes.showBlockedAttemptCount
+          : current.showBlockedAttemptCount,
+      historyRetentionDays: isValidHistoryRetentionDays(changes.historyRetentionDays)
+        ? changes.historyRetentionDays
+        : current.historyRetentionDays,
       updatedAt: now
     };
 

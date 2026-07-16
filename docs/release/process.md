@@ -6,15 +6,16 @@
 0.1.0  Initial tracker
 0.2.0  Blocking and limit improvements
 0.1.3  Vision insights, WXT cross-browser builds, and UI consistency with the 0wl aesthetic
+0.1.4  Settings data control, local backups, 0wl footers, and concise Vision summaries
 0.3.0  Expanded behavioral intelligence
 1.0.0  Stable public release
 ```
 
 Release status:
 
-- Source target: `0.1.3`
-- Approved version: `0.1.2`
-- Status: 0.1.2 approved and listed on Mozilla Add-ons; submit 0.1.3 after release checks.
+- Source target: `0.1.4`
+- Approved version: `0.1.4`
+- Status: 0.1.4 approved and listed on Mozilla Add-ons.
 - Listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
 
 ## Stable Release Checklist

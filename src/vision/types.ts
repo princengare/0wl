@@ -114,6 +114,19 @@ export interface PathwaySummary {
   count: number;
   averageDiversionMs: number;
   commonEntry: string | null;
+  displayLabel?: string;
+  displaySegments?: string[];
+  rawDomains?: string[];
+  includedFocusDomains?: string[];
+  lastFocusDomain?: string | null;
+  firstDistractionDomain?: string | null;
+  averageTimeBeforeDistractionMs?: number;
+  totalDurationMs?: number;
+  confidence?: "low" | "medium" | "high";
+  details?: Array<{
+    label: string;
+    value: string;
+  }>;
 }
 
 export interface ContextSummary {

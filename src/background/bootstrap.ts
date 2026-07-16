@@ -1,5 +1,6 @@
 import { BlockAttemptRecorder } from "./blocking/BlockAttemptRecorder";
 import { BlockRuleManager } from "./blocking/BlockRuleManager";
+import { DataControlService } from "./dataControl/DataControlService";
 import { ExtensionLifecycleManager } from "./lifecycle/ExtensionLifecycleManager";
 import { registerMessageRouter } from "./messaging/messageRouter";
 import { ActiveContextResolver } from "./tracking/ActiveContextResolver";
@@ -80,6 +81,16 @@ function createBackgroundServices() {
     visionSettingsStore,
     domainClassifier
   });
+  const dataControlService = new DataControlService({
+    settingsStore,
+    runtimeStateStore,
+    visionSettingsStore,
+    blockRuleManager,
+    timeLimitManager,
+    frictionRuleManager,
+    trackingEngine,
+    seedSiteCategoryCount: domainClassifier.seedCount
+  });
 
   return {
     settingsStore,
@@ -94,6 +105,7 @@ function createBackgroundServices() {
     visionSettingsStore,
     intentPromptManager,
     visionReportService,
+    dataControlService,
     blockRuleManager,
     timeLimitRuleManager,
     frictionRuleManager,

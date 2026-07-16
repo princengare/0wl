@@ -37,12 +37,12 @@ export class RecommendationEngine {
 
     const pathway = input.pathways[0];
 
-    if (pathway) {
-      const domain = pathway.domains[pathway.domains.length - 1];
+    if (pathway?.firstDistractionDomain) {
+      const domain = pathway.firstDistractionDomain;
       recommendations.push({
         id: `friction:${domain}`,
         title: "Add friction before a recurring distraction path",
-        reason: `${domain} appears at the end of a detected path.`,
+        reason: `${domain} appears as the first distraction in a recurring path.`,
         supportingMetric: `Average diversion ${formatDuration(pathway.averageDiversionMs)}`,
         proposedAction: `Add pause friction to ${domain}.`,
         strength: pathway.count >= 3 ? "high" : "medium",

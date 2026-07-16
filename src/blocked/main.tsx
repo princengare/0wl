@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { tryNormalizeDomain } from "@/shared/domain";
+import { ExtensionFooter } from "@/shared/ExtensionFooter";
 import { sendMessage } from "@/shared/messagingClient";
 import type { ExtensionSettings } from "@/shared/types";
 import "@/styles/terminal.css";
@@ -66,6 +67,7 @@ function BlockedPage(): React.JSX.Element {
           {attemptCount === null ? null : <p>Blocked {attemptCount} times today</p>}
         </div>
       </section>
+      <ExtensionFooter />
     </main>
   );
 }
