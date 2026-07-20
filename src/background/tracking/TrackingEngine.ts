@@ -65,6 +65,7 @@ export class TrackingEngine {
       activeTabId: null,
       activeWindowId: null,
       domain: null,
+      windowScope: null,
       sessionStartedAt: null,
       lastTransitionAt: now,
       revision: previous.revision + 1
@@ -111,11 +112,13 @@ export class TrackingEngine {
     const activeTabId = context?.activeTabId ?? null;
     const activeWindowId = context?.activeWindowId ?? null;
     const domain = context?.domain ?? null;
+    const windowScope = context?.windowScope ?? null;
 
     if (
       previous.status === "tracking" &&
       desired.status === "tracking" &&
       previous.domain === domain &&
+      previous.windowScope === windowScope &&
       domain !== null &&
       previous.sessionStartedAt !== null &&
       previous.sessionStartedAt <= now
@@ -127,6 +130,7 @@ export class TrackingEngine {
           activeTabId,
           activeWindowId,
           domain,
+          windowScope,
           previous.sessionStartedAt
         )
       );
@@ -139,7 +143,7 @@ export class TrackingEngine {
 
     if (desired.status === "tracking" && domain) {
       await this.dependencies.runtimeStateStore.set(
-        makeTrackingState(previous, now, activeTabId, activeWindowId, domain)
+        makeTrackingState(previous, now, activeTabId, activeWindowId, domain, windowScope)
       );
       await this.dependencies.runtimeStateStore.setSessionStartReason(
         startReasonFromReconcile(reason)
@@ -149,7 +153,7 @@ export class TrackingEngine {
 
     const inactiveStatus = desired.status === "tracking" ? "inactive" : desired.status;
     await this.dependencies.runtimeStateStore.set(
-      makeInactiveState(previous, inactiveStatus, now, activeTabId, activeWindowId, domain)
+      makeInactiveState(previous, inactiveStatus, now, activeTabId, activeWindowId, domain, windowScope)
     );
     await this.dependencies.runtimeStateStore.setSessionStartReason(null);
   }

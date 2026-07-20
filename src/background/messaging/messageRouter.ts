@@ -1,6 +1,7 @@
 import type { BlockRuleManager } from "../blocking/BlockRuleManager";
 import type { BlockAttemptRecorder } from "../blocking/BlockAttemptRecorder";
 import type { DataControlService } from "../dataControl/DataControlService";
+import type { MediaActivityTracker } from "../media/MediaActivityTracker";
 import type { TimeLimitManager } from "../timeLimits/TimeLimitManager";
 import type { TrackingEngine } from "../tracking/TrackingEngine";
 import type { BlockAttemptRepository } from "@/db/repositories/BlockAttemptRepository";
@@ -10,6 +11,7 @@ import type { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import type { SettingsStore } from "@/storage/SettingsStore";
 import { browser } from "@/shared/browser";
 import { setIdleDetectionInterval } from "@/platform/idleApi";
+import { normalizeWindowScope } from "@/platform/windowScope";
 import type { DomainClassifier } from "@/vision/classification/DomainClassifier";
 import type { IntentPromptManager } from "@/vision/friction/IntentPromptManager";
 import type { FrictionRuleManager } from "@/vision/friction/FrictionRuleManager";
@@ -22,12 +24,15 @@ import {
   startOfNextLocalDay
 } from "@/shared/time";
 import { isPlainObject, isString } from "@/shared/validation";
+import { toHistorySessionView } from "@/shared/historyPrivacy";
 import type {
   ExtensionSettings,
   HistoryRange,
   HistorySessionView,
   MessageRequest,
   MessageResponse,
+  UsageMode,
+  WindowScope,
   TodaySummary
 } from "@/shared/types";
 
@@ -41,6 +46,7 @@ interface MessageRouterDependencies {
   blockRuleManager: BlockRuleManager;
   timeLimitManager: TimeLimitManager;
   trackingEngine: TrackingEngine;
+  mediaActivityTracker: MediaActivityTracker;
   domainClassifier: DomainClassifier;
   visionSettingsStore: VisionSettingsStore;
   frictionRuleManager: FrictionRuleManager;
@@ -91,6 +97,10 @@ function rangeEnd(range: HistoryRange, now: number): number {
   }
 }
 
+function normalizeUsageMode(value: UsageMode | undefined): UsageMode {
+  return value === "pip" || value === "background" ? value : "active";
+}
+
 async function getTodaySummary({
   dailyUsageRepository,
   runtimeStateStore,
@@ -98,21 +108,30 @@ async function getTodaySummary({
 }: MessageRouterDependencies): Promise<TodaySummary> {
   const now = nowProvider?.() ?? Date.now();
   const dateKey = getDateKey(now);
-  const rows = await dailyUsageRepository.listByDate(dateKey);
+  const rows = await dailyUsageRepository.listByDate(dateKey, "regular");
   const runtimeState = await runtimeStateStore.get(now);
   const liveRows = addLiveDurationToDailyRows(
     rows,
-    runtimeState.status === "tracking" ? runtimeState.domain : null,
-    runtimeState.status === "tracking" ? runtimeState.sessionStartedAt : null,
+    runtimeState.status === "tracking" && runtimeState.windowScope === "regular"
+      ? runtimeState.domain
+      : null,
+    runtimeState.status === "tracking" && runtimeState.windowScope === "regular"
+      ? runtimeState.sessionStartedAt
+      : null,
     now
   ).sort((a, b) => b.durationMs - a.durationMs);
 
   return {
     dateKey,
     totalDurationMs: liveRows.reduce((sum, row) => sum + row.durationMs, 0),
-    currentDomain: runtimeState.status === "tracking" ? runtimeState.domain : null,
+    currentDomain:
+      runtimeState.status === "tracking" && runtimeState.windowScope === "regular"
+        ? runtimeState.domain
+        : null,
     currentSessionElapsedMs:
-      runtimeState.status === "tracking" && runtimeState.sessionStartedAt
+      runtimeState.status === "tracking" &&
+      runtimeState.windowScope === "regular" &&
+      runtimeState.sessionStartedAt
         ? Math.max(0, now - runtimeState.sessionStartedAt)
         : 0,
     domains: liveRows.map((row) => ({
@@ -125,35 +144,54 @@ async function getTodaySummary({
 
 async function getHistory(
   range: HistoryRange,
-  dependencies: MessageRouterDependencies
+  dependencies: MessageRouterDependencies,
+  windowScope: WindowScope = "regular",
+  usageMode: UsageMode = "active"
 ): Promise<HistorySessionView[]> {
   const now = dependencies.now?.() ?? Date.now();
-  return getHistoryInterval(rangeStart(range, now), rangeEnd(range, now), dependencies);
+  return getHistoryInterval(
+    rangeStart(range, now),
+    rangeEnd(range, now),
+    dependencies,
+    windowScope,
+    usageMode
+  );
 }
 
 async function getHistoryInterval(
   start: number,
   end: number,
-  dependencies: MessageRouterDependencies
+  dependencies: MessageRouterDependencies,
+  windowScopeInput: WindowScope = "regular",
+  usageModeInput: UsageMode = "active"
 ): Promise<HistorySessionView[]> {
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
     return [];
   }
 
   const now = dependencies.now?.() ?? Date.now();
-  const sessions = await dependencies.sessionRepository.getOverlapping(start, end);
-  const rows = sessions.map((session) => ({
-    id: session.id,
-    domain: session.domain,
-    startedAt: session.startedAt,
-    endedAt: session.endedAt,
-    durationMs: session.durationMs,
-    dateKey: session.dateKey
-  }));
+  const windowScope = normalizeWindowScope(windowScopeInput);
+  const usageMode = normalizeUsageMode(usageModeInput);
+
+  const sessions = await dependencies.sessionRepository.getOverlapping(
+    start,
+    end,
+    windowScope,
+    usageMode
+  );
   const runtimeState = await dependencies.runtimeStateStore.get(now);
+  const liveMediaSessions =
+    usageMode === "active"
+      ? []
+      : await dependencies.mediaActivityTracker.getLiveSessions(start, end, windowScope, usageMode);
+  const rows = [...sessions, ...liveMediaSessions]
+    .map((session) => toHistorySessionView(session, windowScope, usageMode))
+    .sort((a, b) => b.startedAt - a.startedAt);
 
   if (
+    usageMode === "active" &&
     runtimeState.status === "tracking" &&
+    normalizeWindowScope(runtimeState.windowScope) === windowScope &&
     runtimeState.domain &&
     runtimeState.sessionStartedAt !== null &&
     runtimeState.sessionStartedAt < end &&
@@ -165,7 +203,10 @@ async function getHistoryInterval(
     if (endedAt > startedAt) {
       rows.unshift({
         id: "runtime-current-session",
-        domain: runtimeState.domain,
+        domain: windowScope === "private" ? "Private browsing" : runtimeState.domain,
+        windowScope,
+        usageMode,
+        aggregateOnly: windowScope === "private",
         startedAt,
         endedAt,
         durationMs: endedAt - startedAt,
@@ -182,26 +223,47 @@ async function syncSettingsSideEffects(
   dependencies: MessageRouterDependencies
 ): Promise<void> {
   setIdleDetectionInterval(settings.idleThresholdSeconds);
-  await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+  await dependencies.blockRuleManager.refreshDynamicRules(
+    settings.blockedDomains,
+    dependencies.now?.() ?? Date.now(),
+    settings.privateBrowserTrackingEnabled
+  );
+  await dependencies.blockRuleManager.enforceMatchingTabs(settings);
   await dependencies.trackingEngine.reconcileTrackingState(
     settings.trackingEnabled ? "settings-changed" : "tracking-disabled"
   );
   await dependencies.timeLimitManager.refresh();
 }
 
-async function routeMessage(
+export async function routeMessage(
   message: MessageRequest,
-  dependencies: MessageRouterDependencies
+  dependencies: MessageRouterDependencies,
+  sender?: browser.runtime.MessageSender
 ): Promise<MessageResponse<unknown>> {
   switch (message.type) {
     case "GET_TODAY_SUMMARY":
       return ok(await getTodaySummary(dependencies));
 
     case "GET_HISTORY":
-      return ok(await getHistory(message.range, dependencies));
+      return ok(
+        await getHistory(
+          message.range,
+          dependencies,
+          normalizeWindowScope(message.windowScope),
+          normalizeUsageMode(message.usageMode)
+        )
+      );
 
     case "GET_HISTORY_INTERVAL":
-      return ok(await getHistoryInterval(message.startedAt, message.endedAt, dependencies));
+      return ok(
+        await getHistoryInterval(
+          message.startedAt,
+          message.endedAt,
+          dependencies,
+          normalizeWindowScope(message.windowScope),
+          normalizeUsageMode(message.usageMode)
+        )
+      );
 
     case "GET_SETTINGS":
       return ok(await dependencies.settingsStore.get(dependencies.now?.() ?? Date.now()));
@@ -210,6 +272,7 @@ async function routeMessage(
       const settings = await dependencies.settingsStore.update(
         {
           trackingEnabled: message.changes.trackingEnabled,
+          privateBrowserTrackingEnabled: message.changes.privateBrowserTrackingEnabled,
           idleThresholdSeconds: message.changes.idleThresholdSeconds,
           showBlockedAttemptCount: message.changes.showBlockedAttemptCount,
           historyRetentionDays: message.changes.historyRetentionDays
@@ -221,13 +284,22 @@ async function routeMessage(
     }
 
     case "ADD_BLOCKED_DOMAIN": {
-      await dependencies.settingsStore.addBlockedDomain(
+      const blocked = await dependencies.settingsStore.addBlockedDomain(
         message.input,
         dependencies.now?.() ?? Date.now(),
-        message.schedule
+        message.schedule,
+        message.windowScope
       );
       const settings = await dependencies.settingsStore.get();
-      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+      await dependencies.blockRuleManager.refreshDynamicRules(
+        settings.blockedDomains,
+        dependencies.now?.() ?? Date.now(),
+        settings.privateBrowserTrackingEnabled
+      );
+      await dependencies.blockRuleManager.enforceMatchingTabs(settings, {
+        domain: blocked.domain,
+        windowScope: blocked.windowScope
+      });
       return ok(settings);
     }
 
@@ -237,7 +309,11 @@ async function routeMessage(
         dependencies.now?.() ?? Date.now()
       );
       const settings = await dependencies.settingsStore.get();
-      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+      await dependencies.blockRuleManager.refreshDynamicRules(
+        settings.blockedDomains,
+        dependencies.now?.() ?? Date.now(),
+        settings.privateBrowserTrackingEnabled
+      );
       return ok(settings);
     }
 
@@ -248,7 +324,18 @@ async function routeMessage(
         dependencies.now?.() ?? Date.now()
       );
       const settings = await dependencies.settingsStore.get();
-      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+      await dependencies.blockRuleManager.refreshDynamicRules(
+        settings.blockedDomains,
+        dependencies.now?.() ?? Date.now(),
+        settings.privateBrowserTrackingEnabled
+      );
+      if (message.enabled) {
+        const blocked = settings.blockedDomains.find((row) => row.id === message.id);
+        await dependencies.blockRuleManager.enforceMatchingTabs(settings, {
+          domain: blocked?.domain,
+          windowScope: blocked?.windowScope
+        });
+      }
       return ok(settings);
     }
 
@@ -257,10 +344,20 @@ async function routeMessage(
         message.id,
         message.input,
         message.schedule,
-        dependencies.now?.() ?? Date.now()
+        dependencies.now?.() ?? Date.now(),
+        message.windowScope
       );
       const settings = await dependencies.settingsStore.get();
-      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+      await dependencies.blockRuleManager.refreshDynamicRules(
+        settings.blockedDomains,
+        dependencies.now?.() ?? Date.now(),
+        settings.privateBrowserTrackingEnabled
+      );
+      const blocked = settings.blockedDomains.find((row) => row.id === message.id);
+      await dependencies.blockRuleManager.enforceMatchingTabs(settings, {
+        domain: blocked?.domain,
+        windowScope: blocked?.windowScope
+      });
       return ok(settings);
     }
 
@@ -271,19 +368,34 @@ async function routeMessage(
         dependencies.now?.() ?? Date.now()
       );
       const settings = await dependencies.settingsStore.get();
-      await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+      await dependencies.blockRuleManager.refreshDynamicRules(
+        settings.blockedDomains,
+        dependencies.now?.() ?? Date.now(),
+        settings.privateBrowserTrackingEnabled
+      );
+      const blocked = settings.blockedDomains.find((row) => row.id === message.id);
+      await dependencies.blockRuleManager.enforceMatchingTabs(settings, {
+        domain: blocked?.domain,
+        windowScope: blocked?.windowScope
+      });
       return ok(settings);
     }
 
     case "ADD_TIME_LIMITED_DOMAIN": {
-      await dependencies.settingsStore.addTimeLimitedDomain(
+      const limited = await dependencies.settingsStore.addTimeLimitedDomain(
         message.input,
         message.limitMinutes,
         dependencies.now?.() ?? Date.now(),
-        message.schedule
+        message.schedule,
+        message.windowScope
       );
       const settings = await dependencies.settingsStore.get();
       await dependencies.timeLimitManager.refresh();
+      await dependencies.timeLimitManager.enforceOpenTabsIfExceeded(settings, {
+        domain: limited.domain ?? undefined,
+        targetType: limited.targetType,
+        windowScope: limited.windowScope
+      });
       return ok(settings);
     }
 
@@ -305,6 +417,14 @@ async function routeMessage(
       );
       const settings = await dependencies.settingsStore.get();
       await dependencies.timeLimitManager.refresh();
+      if (message.enabled) {
+        const limited = settings.timeLimitedDomains.find((row) => row.id === message.id);
+        await dependencies.timeLimitManager.enforceOpenTabsIfExceeded(settings, {
+          domain: limited?.domain ?? undefined,
+          targetType: limited?.targetType,
+          windowScope: limited?.windowScope
+        });
+      }
       return ok(settings);
     }
 
@@ -314,18 +434,37 @@ async function routeMessage(
         message.limitMinutes,
         message.schedule,
         dependencies.now?.() ?? Date.now(),
-        message.input
+        message.input,
+        message.windowScope
       );
       const settings = await dependencies.settingsStore.get();
       await dependencies.timeLimitManager.refresh();
+      const limited = settings.timeLimitedDomains.find((row) => row.id === message.id);
+      await dependencies.timeLimitManager.enforceOpenTabsIfExceeded(settings, {
+        domain: limited?.domain ?? undefined,
+        targetType: limited?.targetType,
+        windowScope: limited?.windowScope
+      });
       return ok(settings);
     }
 
     case "GET_TIME_LIMIT_STATUS":
-      return ok(await dependencies.timeLimitManager.getStatus(message.domain));
+      return ok(
+        await dependencies.timeLimitManager.getStatus(
+          message.domain,
+          message.targetType,
+          message.windowScope
+        )
+      );
 
     case "BYPASS_TIME_LIMIT":
-      return ok(await dependencies.timeLimitManager.bypass(message.domain));
+      return ok(
+        await dependencies.timeLimitManager.bypass(
+          message.domain,
+          message.targetType,
+          message.windowScope
+        )
+      );
 
     case "GET_VISION_REPORT":
       return ok(await dependencies.visionReportService.buildReport());
@@ -376,7 +515,11 @@ async function routeMessage(
           recommendation.action.schedule
         );
         const settings = await dependencies.settingsStore.get();
-        await dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+        await dependencies.blockRuleManager.refreshDynamicRules(
+          settings.blockedDomains,
+          dependencies.now?.() ?? Date.now(),
+          settings.privateBrowserTrackingEnabled
+        );
       } else if (recommendation.action.type === "add_friction") {
         const settings = await dependencies.visionSettingsStore.upsertFrictionRule(
           recommendation.action.domain,
@@ -446,23 +589,37 @@ async function routeMessage(
     case "DELETE_LOCAL_DATA":
       return ok(await dependencies.dataControlService.deleteTarget(message.target));
 
+    case "CLEAR_PRIVATE_BROWSING_DATA":
+      return ok(await dependencies.dataControlService.clearPrivateBrowsingData());
+
     case "RESET_ALL_LOCAL_DATA":
       return ok(await dependencies.dataControlService.resetAllLocalData(message.confirmation));
 
     case "GET_BLOCKED_ATTEMPT_COUNT":
-      return ok(await dependencies.blockAttemptRecorder.countToday(message.domain));
+      return ok(
+        await dependencies.blockAttemptRecorder.countToday(message.domain, message.windowScope)
+      );
 
     case "RECORD_BLOCK_ATTEMPT":
-      return ok(await dependencies.blockAttemptRecorder.recordNavigationAttempt(message.domain));
+      return ok(
+        await dependencies.blockAttemptRecorder.recordNavigationAttempt(
+          message.domain,
+          message.windowScope
+        )
+      );
+
+    case "REPORT_MEDIA_STATE":
+      await dependencies.mediaActivityTracker.handleMediaStateReport(message, sender);
+      return ok({ recorded: true });
   }
 }
 
 export function registerMessageRouter(dependencies: MessageRouterDependencies): void {
-  browser.runtime.onMessage.addListener((message: unknown) => {
+  browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (!isMessageRequest(message)) {
       return Promise.resolve(fail(new Error("Unsupported message.")));
     }
 
-    return routeMessage(message, dependencies).catch(fail);
+    return routeMessage(message, dependencies, sender).catch(fail);
   });
 }

@@ -7,7 +7,12 @@ import type { SettingsStore } from "@/storage/SettingsStore";
 import { TIME_LIMIT_ALARM_NAME, TIME_LIMIT_BYPASS_DURATION_MS } from "@/shared/constants";
 import { browser } from "@/shared/browser";
 import { clearAlarm, createAlarm } from "@/platform/alarmsApi";
-import { normalizeDomain } from "@/shared/domain";
+import { normalizeDomain, normalizeDomainFromUrl } from "@/shared/domain";
+import {
+  isScopeAllowedBySettings,
+  normalizeWindowScope,
+  windowScopeFromTab
+} from "@/platform/windowScope";
 import {
   getScheduleIntervalsBetween,
   isScheduleActive,
@@ -22,7 +27,14 @@ import {
   startOfNextLocalDay
 } from "@/shared/time";
 import { isTrackableUrl } from "@/shared/url";
-import type { ExtensionSettings, TimeLimitStatus, TimeLimitedDomain } from "@/shared/types";
+import { isAppSurfaceUrl } from "@/shared/appSurface";
+import type {
+  ExtensionSettings,
+  TimeLimitStatus,
+  TimeLimitedDomain,
+  TimeLimitTargetType,
+  WindowScope
+} from "@/shared/types";
 
 interface TimeLimitManagerDependencies {
   settingsStore: SettingsStore;
@@ -41,6 +53,41 @@ function limitMs(limited: TimeLimitedDomain): number {
   return limited.limitMinutes * 60 * 1000;
 }
 
+function timeLimitLabel(limited: TimeLimitedDomain): string {
+  if (limited.targetType === "global") {
+    return limited.windowScope === "private" ? "All Private Browsing" : "All Browsing";
+  }
+
+  return limited.domain ?? "limited site";
+}
+
+function resolveStatusTarget(
+  domainInput: string | undefined,
+  targetTypeInput: TimeLimitTargetType = "domain"
+): { targetType: TimeLimitTargetType; domain: string | null } {
+  if (targetTypeInput === "global") {
+    return { targetType: "global", domain: null };
+  }
+
+  if (!domainInput) {
+    throw new Error("Choose a valid time-limited domain.");
+  }
+
+  return {
+    targetType: "domain",
+    domain: normalizeDomain(domainInput)
+  };
+}
+
+function matchesLimitTarget(limited: TimeLimitedDomain, domain: string): boolean {
+  return limited.targetType === "global" || limited.domain === domain;
+}
+
+type QueryableTabsApi = typeof browser.tabs & {
+  query?: (queryInfo: Record<string, unknown>) => Promise<browser.tabs.Tab[]>;
+  update?: typeof browser.tabs.update;
+};
+
 export class TimeLimitManager {
   private readonly now: () => number;
 
@@ -55,6 +102,7 @@ export class TimeLimitManager {
 
     await this.dependencies.timeLimitRuleManager.syncDynamicRules(exceededDomains);
     await this.enforceActiveTabIfExceeded(settings, now);
+    await this.enforceOpenTabsIfExceeded(settings, {}, now);
     await this.scheduleNextAlarm(settings, now);
   }
 
@@ -66,22 +114,42 @@ export class TimeLimitManager {
     await this.refresh();
   }
 
-  async bypass(domainInput: string): Promise<TimeLimitStatus> {
+  async bypass(
+    domainInput?: string,
+    targetTypeInput: TimeLimitTargetType = "domain",
+    windowScopeInput: WindowScope = "regular"
+  ): Promise<TimeLimitStatus> {
     const now = this.now();
-    const domain = normalizeDomain(domainInput);
+    const target = resolveStatusTarget(domainInput, targetTypeInput);
+    const windowScope = normalizeWindowScope(windowScopeInput);
     const bypassUntil = now + TIME_LIMIT_BYPASS_DURATION_MS;
 
-    await this.dependencies.settingsStore.setTimeLimitBypass(domain, bypassUntil, now);
+    await this.dependencies.settingsStore.setTimeLimitBypass(
+      domainInput,
+      bypassUntil,
+      now,
+      target.targetType,
+      windowScope
+    );
     await this.refresh();
-    return this.getStatus(domain);
+    return this.getStatus(target.domain ?? undefined, target.targetType, windowScope);
   }
 
-  async getStatus(domainInput: string): Promise<TimeLimitStatus> {
+  async getStatus(
+    domainInput?: string,
+    targetTypeInput: TimeLimitTargetType = "domain",
+    windowScopeInput: WindowScope = "regular"
+  ): Promise<TimeLimitStatus> {
     const now = this.now();
-    const domain = normalizeDomain(domainInput);
+    const target = resolveStatusTarget(domainInput, targetTypeInput);
+    const windowScope = normalizeWindowScope(windowScopeInput);
     const settings = await this.dependencies.settingsStore.get(now);
     const limited = settings.timeLimitedDomains.find(
-      (candidate) => candidate.enabled && candidate.domain === domain
+      (candidate) =>
+        candidate.enabled &&
+        candidate.targetType === target.targetType &&
+        candidate.domain === target.domain &&
+        candidate.windowScope === windowScope
     );
 
     if (!limited) {
@@ -92,7 +160,10 @@ export class TimeLimitManager {
     const remainingMs = Math.max(0, limitMs(limited) - usedMs);
 
     return {
-      domain,
+      domain: limited.domain,
+      targetType: limited.targetType,
+      windowScope: limited.windowScope,
+      label: timeLimitLabel(limited),
       limitMinutes: limited.limitMinutes,
       usedMs,
       remainingMs,
@@ -101,15 +172,25 @@ export class TimeLimitManager {
     };
   }
 
-  private async getAlwaysActiveTodayUsageMs(domain: string, now: number): Promise<number> {
+  private async getAlwaysActiveTodayUsageMs(
+    limited: TimeLimitedDomain,
+    now: number
+  ): Promise<number> {
     const today = getDateKey(now);
-    const rows = await this.dependencies.dailyUsageRepository.listByDate(today);
-    const persistedMs = rows.find((row) => row.domain === domain)?.durationMs ?? 0;
+    const rows = await this.dependencies.dailyUsageRepository.listByDate(
+      today,
+      limited.windowScope
+    );
+    const persistedMs =
+      limited.targetType === "global"
+        ? rows.reduce((sum, row) => sum + row.durationMs, 0)
+        : (rows.find((row) => row.domain === limited.domain)?.durationMs ?? 0);
     const runtimeState = await this.dependencies.runtimeStateStore.get(now);
 
     if (
       runtimeState.status !== "tracking" ||
-      runtimeState.domain !== domain ||
+      normalizeWindowScope(runtimeState.windowScope) !== limited.windowScope ||
+      (limited.targetType === "domain" && runtimeState.domain !== limited.domain) ||
       runtimeState.sessionStartedAt === null ||
       runtimeState.sessionStartedAt >= now
     ) {
@@ -131,10 +212,12 @@ export class TimeLimitManager {
     const intervals = getScheduleIntervalsBetween(limited.schedule, todayStart, todayEnd);
     const sessions = await this.dependencies.sessionRepository.getOverlapping(
       searchStart,
-      todayEnd
+      todayEnd,
+      limited.windowScope,
+      "active"
     );
     const completedMs = sessions
-      .filter((session) => session.domain === limited.domain)
+      .filter((session) => limited.targetType === "global" || session.domain === limited.domain)
       .reduce(
         (total, session) =>
           total + overlapDurationMs(session.startedAt, session.endedAt, intervals),
@@ -144,7 +227,8 @@ export class TimeLimitManager {
 
     if (
       runtimeState.status !== "tracking" ||
-      runtimeState.domain !== limited.domain ||
+      normalizeWindowScope(runtimeState.windowScope) !== limited.windowScope ||
+      (limited.targetType === "domain" && runtimeState.domain !== limited.domain) ||
       runtimeState.sessionStartedAt === null ||
       runtimeState.sessionStartedAt >= now
     ) {
@@ -156,18 +240,21 @@ export class TimeLimitManager {
 
   private async getTodayUsageMs(limited: TimeLimitedDomain, now: number): Promise<number> {
     if (isScheduleAlways(limited.schedule)) {
-      return this.getAlwaysActiveTodayUsageMs(limited.domain, now);
+      return this.getAlwaysActiveTodayUsageMs(limited, now);
     }
 
     return this.getScheduledTodayUsageMs(limited, now);
   }
 
   private async getExceededDomains(settings: ExtensionSettings, now: number): Promise<string[]> {
-    const exceeded: string[] = [];
+    const exceededByDomain = new Map<string, Set<WindowScope>>();
 
     for (const limited of settings.timeLimitedDomains) {
       if (
         !limited.enabled ||
+        limited.targetType !== "domain" ||
+        !limited.domain ||
+        !isScopeAllowedBySettings(settings, limited.windowScope) ||
         hasActiveBypass(limited, now) ||
         !isScheduleActive(limited.schedule, now)
       ) {
@@ -177,11 +264,71 @@ export class TimeLimitManager {
       const usedMs = await this.getTodayUsageMs(limited, now);
 
       if (usedMs >= limitMs(limited)) {
-        exceeded.push(limited.domain);
+        const scopes = exceededByDomain.get(limited.domain) ?? new Set<WindowScope>();
+        scopes.add(limited.windowScope);
+        exceededByDomain.set(limited.domain, scopes);
       }
     }
 
-    return exceeded;
+    return [...exceededByDomain.entries()]
+      .filter(
+        ([, scopes]) =>
+          settings.privateBrowserTrackingEnabled && scopes.has("regular") && scopes.has("private")
+      )
+      .map(([domain]) => domain);
+  }
+
+  private async findExceededLimitForDomain(
+    settings: ExtensionSettings,
+    domain: string,
+    windowScope: WindowScope,
+    now: number,
+    targetType?: TimeLimitTargetType
+  ): Promise<TimeLimitedDomain | null> {
+    if (!isScopeAllowedBySettings(settings, windowScope)) {
+      return null;
+    }
+
+    const candidates = settings.timeLimitedDomains.filter(
+      (candidate) =>
+        candidate.enabled &&
+        candidate.windowScope === windowScope &&
+        (!targetType || candidate.targetType === targetType) &&
+        matchesLimitTarget(candidate, domain) &&
+        !hasActiveBypass(candidate, now) &&
+        isScheduleActive(candidate.schedule, now)
+    );
+
+    const sorted = [...candidates].sort((a, b) =>
+      a.targetType === b.targetType ? 0 : a.targetType === "domain" ? -1 : 1
+    );
+
+    for (const limited of sorted) {
+      const usedMs = await this.getTodayUsageMs(limited, now);
+
+      if (usedMs >= limitMs(limited)) {
+        return limited;
+      }
+    }
+
+    return null;
+  }
+
+  private async redirectTabForLimit(
+    tabId: number,
+    tabUrl: string | undefined,
+    limited: TimeLimitedDomain
+  ): Promise<void> {
+    const returnUrl =
+      tabUrl && isTrackableUrl(tabUrl)
+        ? tabUrl
+        : limited.domain
+          ? `https://${limited.domain}/`
+          : "about:blank";
+
+    await browser.tabs.update(tabId, {
+      url: buildTimeLimitPageUrl(limited, returnUrl)
+    });
   }
 
   private async enforceActiveTabIfExceeded(
@@ -198,29 +345,82 @@ export class TimeLimitManager {
       return;
     }
 
-    const limited = settings.timeLimitedDomains.find(
-      (candidate) => candidate.enabled && candidate.domain === runtimeState.domain
+    const windowScope = normalizeWindowScope(runtimeState.windowScope);
+    const limited = await this.findExceededLimitForDomain(
+      settings,
+      runtimeState.domain,
+      windowScope,
+      now
     );
 
-    if (!limited || hasActiveBypass(limited, now) || !isScheduleActive(limited.schedule, now)) {
-      return;
-    }
-
-    const usedMs = await this.getTodayUsageMs(limited, now);
-
-    if (usedMs < limitMs(limited)) {
+    if (!limited) {
       return;
     }
 
     const tab = await browser.tabs.get(runtimeState.activeTabId);
-    const returnUrl =
-      tab.url && isTrackableUrl(tab.url) && normalizeDomain(tab.url) === limited.domain
-        ? tab.url
-        : `https://${limited.domain}/`;
+    const tabDomain = tab.url && isTrackableUrl(tab.url) ? normalizeDomainFromUrl(tab.url) : null;
 
-    await browser.tabs.update(runtimeState.activeTabId, {
-      url: buildTimeLimitPageUrl(limited.domain, returnUrl)
-    });
+    if (tabDomain !== runtimeState.domain) {
+      return;
+    }
+
+    await this.redirectTabForLimit(runtimeState.activeTabId, tab.url, limited);
+  }
+
+  async enforceOpenTabsIfExceeded(
+    settings: ExtensionSettings,
+    change: { domain?: string; targetType?: TimeLimitTargetType; windowScope?: WindowScope } = {},
+    now = this.now()
+  ): Promise<void> {
+    const tabsApi = browser.tabs as QueryableTabsApi;
+
+    if (typeof tabsApi.query !== "function" || typeof tabsApi.update !== "function") {
+      return;
+    }
+
+    const tabs = await tabsApi.query({});
+
+    await Promise.all(
+      tabs.map(async (tab) => {
+        if (
+          tab.id === undefined ||
+          !tab.url ||
+          !isTrackableUrl(tab.url) ||
+          isAppSurfaceUrl(tab.url)
+        ) {
+          return;
+        }
+
+        const windowScope = windowScopeFromTab(tab);
+        const domain = normalizeDomainFromUrl(tab.url);
+
+        if (!domain) {
+          return;
+        }
+
+        if (change.windowScope && change.windowScope !== windowScope) {
+          return;
+        }
+
+        if (change.domain && change.domain !== domain) {
+          return;
+        }
+
+        const limited = await this.findExceededLimitForDomain(
+          settings,
+          domain,
+          windowScope,
+          now,
+          change.targetType
+        );
+
+        if (!limited) {
+          return;
+        }
+
+        await this.redirectTabForLimit(tab.id, tab.url, limited);
+      })
+    );
   }
 
   private async scheduleNextAlarm(settings: ExtensionSettings, now: number): Promise<void> {
@@ -234,6 +434,10 @@ export class TimeLimitManager {
         continue;
       }
 
+      if (!isScopeAllowedBySettings(settings, limited.windowScope)) {
+        continue;
+      }
+
       if (hasActiveBypass(limited, now) && limited.bypassUntil !== null) {
         candidates.push(limited.bypassUntil);
       }
@@ -244,7 +448,12 @@ export class TimeLimitManager {
         candidates.push(nextTransition);
       }
 
-      if (runtimeState.status === "tracking" && runtimeState.domain === limited.domain) {
+      if (
+        runtimeState.status === "tracking" &&
+        normalizeWindowScope(runtimeState.windowScope) === limited.windowScope &&
+        runtimeState.domain &&
+        matchesLimitTarget(limited, runtimeState.domain)
+      ) {
         if (!isScheduleActive(limited.schedule, now) || hasActiveBypass(limited, now)) {
           continue;
         }

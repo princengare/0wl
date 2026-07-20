@@ -1,6 +1,7 @@
 import type { Browser } from "wxt/browser";
 import { BLOCKED_PAGE_PATH, MANAGED_RULE_ID_MIN, MANAGED_RULE_ID_SPAN } from "@/shared/constants";
 import { browser as extensionBrowser } from "@/shared/browser";
+import type { WindowScope } from "@/shared/types";
 
 export function stableRuleIdForDomain(
   domain: string,
@@ -21,11 +22,12 @@ export function isManagedRuleId(ruleId: number): boolean {
   return ruleId >= MANAGED_RULE_ID_MIN && ruleId < MANAGED_RULE_ID_MIN + MANAGED_RULE_ID_SPAN;
 }
 
-export function buildBlockedPageUrl(domain: string): string {
+export function buildBlockedPageUrl(domain: string, windowScope: WindowScope = "regular"): string {
   const url = new URL(
     extensionBrowser.runtime.getURL(BLOCKED_PAGE_PATH as Parameters<typeof extensionBrowser.runtime.getURL>[0])
   );
   url.searchParams.set("domain", domain);
+  url.searchParams.set("scope", windowScope);
   return url.toString();
 }
 

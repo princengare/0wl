@@ -4,6 +4,7 @@ export const DATABASE_VERSION = 2;
 export const SETTINGS_STORAGE_KEY = "settings";
 export const RUNTIME_STATE_STORAGE_KEY = "runtimeTrackingState";
 export const RUNTIME_SESSION_META_STORAGE_KEY = "runtimeTrackingSessionMeta";
+export const MEDIA_RUNTIME_STATE_STORAGE_KEY = "mediaRuntimeState";
 export const LIFECYCLE_STORAGE_KEY = "extensionLifecycle";
 export const VISION_SETTINGS_STORAGE_KEY = "visionSettings";
 export const VISION_CLASSIFICATIONS_STORAGE_KEY = "visionDomainClassifications";
@@ -26,3 +27,5 @@ export const INTENT_CHECKIN_DURATION_MS = 15 * 60 * 1000;
 
 export const DEFAULT_IDLE_THRESHOLD_SECONDS = 60;
 export const MIN_VALID_SESSION_DURATION_MS = 1;
+export const MEDIA_HEARTBEAT_INTERVAL_MS = 15 * 1000;
+export const MEDIA_REPORT_STALE_MS = 45 * 1000;

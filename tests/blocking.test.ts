@@ -16,8 +16,9 @@ interface DynamicUpdateOptions {
   addRules?: browser.declarativeNetRequest.Rule[];
 }
 
-function makeBrowserMock() {
+function makeBrowserMock(tabs: browser.tabs.Tab[] = []) {
   let rules: browser.declarativeNetRequest.Rule[] = [];
+  const tabsUpdate = vi.fn(async () => ({}));
   const updateDynamicRules = vi.fn(
     async ({ removeRuleIds = [], addRules = [] }: DynamicUpdateOptions) => {
       rules = rules.filter((rule) => !removeRuleIds.includes(rule.id));
@@ -36,6 +37,10 @@ function makeBrowserMock() {
     alarms: {
       clear: vi.fn(async () => true),
       create: vi.fn()
+    },
+    tabs: {
+      query: vi.fn(async () => tabs),
+      update: tabsUpdate
     }
   });
 
@@ -43,8 +48,16 @@ function makeBrowserMock() {
     get rules() {
       return rules;
     },
-    updateDynamicRules
+    updateDynamicRules,
+    tabsUpdate
   };
+}
+
+function dnrScopePair(rule: Omit<BlockedDomain, "windowScope">): BlockedDomain[] {
+  return [
+    { ...rule, windowScope: "regular" },
+    { ...rule, id: `${rule.id}-private`, windowScope: "private" }
+  ];
 }
 
 describe("blocking", () => {
@@ -65,6 +78,24 @@ describe("blocking", () => {
     await expect(settingsStore.addBlockedDomain("m.instagram.com", 2)).rejects.toThrow(
       "already blocked"
     );
+  });
+
+  it("keeps regular and private blocked rules separate", async () => {
+    const storage = new MemoryStorageArea() as unknown as browser.storage.StorageArea;
+    const settingsStore = new SettingsStore(storage);
+
+    const regular = await settingsStore.addBlockedDomain("instagram.com", 1);
+    const privateRule = await settingsStore.addBlockedDomain(
+      "instagram.com",
+      2,
+      ALWAYS_SCHEDULE,
+      "private"
+    );
+
+    expect(regular.windowScope).toBe("regular");
+    expect(privateRule.windowScope).toBe("private");
+    expect((await settingsStore.getEnabledBlockedDomains(3, "regular"))).toHaveLength(1);
+    expect((await settingsStore.getEnabledBlockedDomains(3, "private"))).toHaveLength(1);
   });
 
   it("edits blocked domains and rejects duplicate edits", async () => {
@@ -107,6 +138,56 @@ describe("blocking", () => {
     expect(isDomainBlocked("example.com", blockedDomains)).toBe(false);
   });
 
+  it("matches blocked domains only in the requested window scope", () => {
+    const blockedDomains: BlockedDomain[] = [
+      {
+        id: "1",
+        domain: "instagram.com",
+        windowScope: "private",
+        enabled: true,
+        schedule: ALWAYS_SCHEDULE,
+        createdAt: 1
+      }
+    ];
+
+    expect(isDomainBlocked("instagram.com", blockedDomains, 1, "private")).toBe(true);
+    expect(isDomainBlocked("instagram.com", blockedDomains, 1, "regular")).toBe(false);
+  });
+
+  it("immediately redirects matching tabs after a block is added", async () => {
+    const browserMock = makeBrowserMock([
+      { id: 9, url: "https://www.instagram.com/reels/", active: true, incognito: false }
+    ] as browser.tabs.Tab[]);
+    const storage = new MemoryStorageArea() as unknown as browser.storage.StorageArea;
+    const settingsStore = new SettingsStore(storage);
+    const manager = new BlockRuleManager();
+
+    await settingsStore.addBlockedDomain("instagram.com", 1);
+    const settings = await settingsStore.get(2);
+    await manager.enforceMatchingTabs(settings, { domain: "instagram.com", windowScope: "regular" });
+
+    expect(browserMock.tabsUpdate).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ url: expect.stringContaining("blocked.html") })
+    );
+  });
+
+  it("does not redirect regular tabs for private-only blocks", async () => {
+    const browserMock = makeBrowserMock([
+      { id: 9, url: "https://www.instagram.com/reels/", active: true, incognito: false }
+    ] as browser.tabs.Tab[]);
+    const storage = new MemoryStorageArea() as unknown as browser.storage.StorageArea;
+    const settingsStore = new SettingsStore(storage);
+    const manager = new BlockRuleManager();
+
+    await settingsStore.update({ privateBrowserTrackingEnabled: true }, 1);
+    await settingsStore.addBlockedDomain("instagram.com", 2, ALWAYS_SCHEDULE, "private");
+    const settings = await settingsStore.get(3);
+    await manager.enforceMatchingTabs(settings, { domain: "instagram.com", windowScope: "private" });
+
+    expect(browserMock.tabsUpdate).not.toHaveBeenCalled();
+  });
+
   it("generates stable rule IDs and main-frame redirect rules", () => {
     expect(stableRuleIdForDomain("instagram.com")).toBe(stableRuleIdForDomain("instagram.com"));
     expect(buildDynamicBlockRule("instagram.com")).toMatchObject({
@@ -124,45 +205,40 @@ describe("blocking", () => {
   it("removing a block removes the corresponding dynamic rule", async () => {
     const browserMock = makeBrowserMock();
     const manager = new BlockRuleManager();
-    const blockedDomains: BlockedDomain[] = [
-      {
+    const blockedDomains: BlockedDomain[] = dnrScopePair({
         id: "1",
         domain: "instagram.com",
         enabled: true,
         schedule: ALWAYS_SCHEDULE,
         createdAt: 1
-      }
-    ];
+      });
 
-    await manager.syncDynamicRules(blockedDomains);
+    await manager.syncDynamicRules(blockedDomains, Date.now(), true);
     expect(browserMock.rules).toHaveLength(1);
 
-    await manager.syncDynamicRules([]);
+    await manager.syncDynamicRules([], Date.now(), true);
     expect(browserMock.rules).toHaveLength(0);
   });
 
   it("keeps existing always-blocked rules active", async () => {
     const browserMock = makeBrowserMock();
     const manager = new BlockRuleManager();
-    const blockedDomains: BlockedDomain[] = [
-      {
+    const blockedDomains: BlockedDomain[] = dnrScopePair({
         id: "1",
         domain: "instagram.com",
         enabled: true,
         schedule: ALWAYS_SCHEDULE,
         createdAt: 1
-      }
-    ];
+      });
 
-    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 12, 23).getTime());
+    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 12, 23).getTime(), true);
     expect(browserMock.rules).toHaveLength(1);
   });
 
   it("activates and deactivates scheduled block rules", async () => {
     const browserMock = makeBrowserMock();
     const manager = new BlockRuleManager();
-    const blockedDomains: BlockedDomain[] = [
-      {
+    const blockedDomains: BlockedDomain[] = dnrScopePair({
         id: "1",
         domain: "reddit.com",
         enabled: true,
@@ -173,21 +249,19 @@ describe("blocking", () => {
           endMinutes: 17 * 60
         },
         createdAt: 1
-      }
-    ];
+      });
 
-    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 6, 10).getTime());
+    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 6, 10).getTime(), true);
     expect(browserMock.rules).toHaveLength(1);
 
-    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 6, 18).getTime());
+    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 6, 18).getTime(), true);
     expect(browserMock.rules).toHaveLength(0);
   });
 
   it("supports midnight-crossing scheduled block rules", async () => {
     const browserMock = makeBrowserMock();
     const manager = new BlockRuleManager();
-    const blockedDomains: BlockedDomain[] = [
-      {
+    const blockedDomains: BlockedDomain[] = dnrScopePair({
         id: "1",
         domain: "reddit.com",
         enabled: true,
@@ -198,16 +272,15 @@ describe("blocking", () => {
           endMinutes: 7 * 60
         },
         createdAt: 1
-      }
-    ];
+      });
 
-    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 6, 23).getTime());
+    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 6, 23).getTime(), true);
     expect(browserMock.rules).toHaveLength(1);
 
-    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 7, 6).getTime());
+    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 7, 6).getTime(), true);
     expect(browserMock.rules).toHaveLength(1);
 
-    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 7, 8).getTime());
+    await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 7, 8).getTime(), true);
     expect(browserMock.rules).toHaveLength(0);
   });
 

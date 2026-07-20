@@ -95,6 +95,58 @@ describe("tracking state machine", () => {
     expect(state.sessionStartedAt).toBe(1_000);
   });
 
+  it("does not track private windows while private tracking is disabled", async () => {
+    const harness = createHarness();
+    harness.setContext(makeContext("youtube.com", { windowScope: "private" }));
+
+    await harness.engine.reconcileTrackingState("startup");
+
+    const state = await harness.runtimeStateStore.get();
+    expect(state.status).toBe("inactive");
+    expect(harness.sessions).toHaveLength(0);
+  });
+
+  it("tracks private windows when private tracking is enabled", async () => {
+    const harness = createHarness();
+    await harness.settingsStore.update({ privateBrowserTrackingEnabled: true }, 900);
+    harness.setContext(makeContext("youtube.com", { windowScope: "private" }));
+
+    await harness.engine.reconcileTrackingState("startup");
+
+    const state = await harness.runtimeStateStore.get();
+    expect(state.status).toBe("tracking");
+    expect(state.windowScope).toBe("private");
+
+    harness.setNow(3_000);
+    harness.setContext(makeContext("youtube.com", { windowScope: "private", idleState: "idle" }));
+    await harness.engine.reconcileTrackingState("idle");
+
+    expect(harness.sessions[0]).toMatchObject({
+      domain: "youtube.com",
+      windowScope: "private"
+    });
+  });
+
+  it("stops private active browsing when the browser is unfocused", async () => {
+    const harness = createHarness();
+    await harness.settingsStore.update({ privateBrowserTrackingEnabled: true }, 900);
+    harness.setContext(makeContext("youtube.com", { windowScope: "private" }));
+    await harness.engine.reconcileTrackingState("startup");
+
+    harness.setNow(4_000);
+    harness.setContext(
+      makeContext("youtube.com", { browserFocused: false, windowScope: "private" })
+    );
+    await harness.engine.reconcileTrackingState("window-blurred");
+
+    expect(harness.sessions[0]).toMatchObject({
+      domain: "youtube.com",
+      windowScope: "private",
+      endReason: "window-blurred"
+    });
+    expect((await harness.runtimeStateStore.get()).status).toBe("browser-unfocused");
+  });
+
   it("closes domain A and starts domain B at the same transition timestamp", async () => {
     const harness = createHarness();
     await harness.engine.reconcileTrackingState("startup");

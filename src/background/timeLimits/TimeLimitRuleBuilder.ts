@@ -6,6 +6,7 @@ import {
 } from "@/shared/constants";
 import { stableRuleIdForDomain } from "@/background/blocking/DynamicRuleBuilder";
 import { browser as extensionBrowser } from "@/shared/browser";
+import type { TimeLimitedDomain, WindowScope } from "@/shared/types";
 
 export function stableTimeLimitRuleIdForDomain(domain: string): number {
   return stableRuleIdForDomain(domain, TIME_LIMIT_RULE_ID_MIN, TIME_LIMIT_RULE_ID_SPAN);
@@ -17,11 +18,24 @@ export function isManagedTimeLimitRuleId(ruleId: number): boolean {
   );
 }
 
-export function buildTimeLimitPageUrl(domain: string, returnUrl?: string): string {
+export function buildTimeLimitPageUrl(
+  limit: string | Pick<TimeLimitedDomain, "domain" | "targetType" | "windowScope">,
+  returnUrl?: string
+): string {
   const url = new URL(
     extensionBrowser.runtime.getURL(TIME_LIMIT_PAGE_PATH as Parameters<typeof extensionBrowser.runtime.getURL>[0])
   );
-  url.searchParams.set("domain", domain);
+  const target =
+    typeof limit === "string"
+      ? { domain: limit, targetType: "domain" as const, windowScope: "regular" as WindowScope }
+      : limit;
+
+  url.searchParams.set("target", target.targetType);
+  url.searchParams.set("scope", target.windowScope);
+
+  if (target.domain) {
+    url.searchParams.set("domain", target.domain);
+  }
 
   if (returnUrl) {
     url.searchParams.set("returnUrl", returnUrl);

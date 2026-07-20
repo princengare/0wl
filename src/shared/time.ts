@@ -211,6 +211,7 @@ export function addLiveDurationToDailyRows(
       id: `${today}::${domain}`,
       dateKey: today,
       domain,
+      windowScope: "regular",
       durationMs: liveTodaySlice.durationMs,
       sessionCount: 0,
       lastUpdatedAt: now

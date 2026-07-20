@@ -9,9 +9,28 @@ import {
   type HourlyUsageBucket
 } from "@/shared/historyGraph";
 import { getHistoryPanelMode } from "@/shared/historySelection";
+import {
+  canDrillIntoHistoryMode,
+  DEFAULT_HISTORY_MODE,
+  historyModeEmptyState,
+  historyModeToScope,
+  historyModeToUsageMode,
+  toggleHistoryMode,
+  type HistoryModeButton
+} from "@/shared/historyModes";
 import { browser } from "@/shared/browser";
+import { APP_PRIVACY_POLICY_URL } from "@/shared/appSurface";
+import { getPrivateWindowAccessStatus, normalizeWindowScope } from "@/platform/windowScope";
+import { getBrowserTarget } from "@/platform/browserTarget";
 import { ExtensionFooter } from "@/shared/ExtensionFooter";
 import { sendMessage } from "@/shared/messagingClient";
+import {
+  getTimeLimitPlaceholders,
+  PLACEHOLDER_ALT_HOLD_MS,
+  PLACEHOLDER_INITIAL_DELAY_MS,
+  PLACEHOLDER_TYPE_INTERVAL_MS,
+  typedPlaceholderAtElapsed
+} from "@/shared/placeholders";
 import {
   formatClockRange,
   formatDuration,
@@ -42,7 +61,9 @@ import type {
   HistorySessionView,
   ScheduleConfig,
   TimeLimitedDomain,
-  TodaySummary
+  TodaySummary,
+  HistoryModeSelection,
+  WindowScope
 } from "@/shared/types";
 import type {
   DomainCategory,
@@ -60,7 +81,11 @@ type VisionTab = "patterns" | "insights" | "recommendations" | "categories";
 type SettingsChanges = Partial<
   Pick<
     ExtensionSettings,
-    "trackingEnabled" | "idleThresholdSeconds" | "showBlockedAttemptCount" | "historyRetentionDays"
+    | "trackingEnabled"
+    | "privateBrowserTrackingEnabled"
+    | "idleThresholdSeconds"
+    | "showBlockedAttemptCount"
+    | "historyRetentionDays"
   >
 >;
 
@@ -79,17 +104,28 @@ const retentionOptions = [
   { label: "Forever", value: "forever" }
 ] as const;
 
-const deleteSpecificOptions: Array<{ label: string; value: Exclude<DataDeleteTarget, "settings"> }> =
-  [
-    { label: "Delete Browsing History", value: "browsing-history" },
-    { label: "Delete Blocked Attempts", value: "blocked-attempts" },
-    { label: "Delete Vision Analytics", value: "vision-analytics" },
-    { label: "Reset Custom Site Categories", value: "custom-site-categories" }
-  ];
+const deleteSpecificOptions: Array<{
+  label: string;
+  value: Exclude<DataDeleteTarget, "settings">;
+}> = [
+  { label: "Delete Browsing History", value: "browsing-history" },
+  { label: "Delete Blocked Attempts", value: "blocked-attempts" },
+  { label: "Delete Vision Analytics", value: "vision-analytics" },
+  { label: "Reset Custom Site Categories", value: "custom-site-categories" }
+];
 
-const timeLimitOptions = [1, 5, 10, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300].map(
-  (value) => ({ label: formatDurationMinutes(value), value })
-);
+const regularTimeLimitMinutes = [
+  1, 5, 10, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300
+] as const;
+const privateTimeLimitMinutes = [0, ...regularTimeLimitMinutes] as const;
+const timeLimitOptions = regularTimeLimitMinutes.map((value) => ({
+  label: formatDurationMinutes(value),
+  value
+}));
+const privateTimeLimitOptions = privateTimeLimitMinutes.map((value) => ({
+  label: formatDurationMinutes(value),
+  value
+}));
 
 const dayLabels = ["S", "M", "T", "W", "T", "F", "S"] as const;
 const HOUR_MS = 60 * 60 * 1000;
@@ -228,6 +264,181 @@ function formatFrictionLevel(level: FrictionLevel): string {
     case 4:
       return "Hard stop";
   }
+}
+
+function timeLimitDisplayName(limited: TimeLimitedDomain): string {
+  if (limited.targetType === "global") {
+    return limited.windowScope === "private" ? "All Private Browsing" : "All Browsing";
+  }
+
+  return limited.domain ?? "All Browsing";
+}
+
+function useCyclingTypedPlaceholder(inputValue: string, privateMode = false): string {
+  const { defaultPlaceholder, alternatePlaceholder } = getTimeLimitPlaceholders(privateMode);
+  const [placeholder, setPlaceholder] = useState(defaultPlaceholder);
+
+  useEffect(() => {
+    if (inputValue.length > 0) {
+      setPlaceholder(defaultPlaceholder);
+      return undefined;
+    }
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timers = new Set<number>();
+    let cancelled = false;
+
+    function schedule(callback: () => void, delay: number): void {
+      const timer = window.setTimeout(() => {
+        timers.delete(timer);
+        callback();
+      }, delay);
+      timers.add(timer);
+    }
+
+    function cycle(): void {
+      if (cancelled) {
+        return;
+      }
+
+      setPlaceholder(defaultPlaceholder);
+      schedule(() => {
+        if (cancelled) {
+          return;
+        }
+
+        if (prefersReducedMotion) {
+          setPlaceholder(
+            typedPlaceholderAtElapsed(
+              PLACEHOLDER_INITIAL_DELAY_MS,
+              defaultPlaceholder,
+              alternatePlaceholder,
+              true
+            )
+          );
+          schedule(cycle, PLACEHOLDER_ALT_HOLD_MS);
+          return;
+        }
+
+        let index = 0;
+
+        function typeNext(): void {
+          if (cancelled) {
+            return;
+          }
+
+          index += 1;
+          setPlaceholder(
+            typedPlaceholderAtElapsed(
+              PLACEHOLDER_INITIAL_DELAY_MS + (index - 1) * PLACEHOLDER_TYPE_INTERVAL_MS,
+              defaultPlaceholder,
+              alternatePlaceholder
+            )
+          );
+
+          if (index < alternatePlaceholder.length) {
+            schedule(typeNext, PLACEHOLDER_TYPE_INTERVAL_MS);
+            return;
+          }
+
+          schedule(cycle, PLACEHOLDER_ALT_HOLD_MS);
+        }
+
+        setPlaceholder("");
+        schedule(typeNext, PLACEHOLDER_TYPE_INTERVAL_MS);
+      }, PLACEHOLDER_INITIAL_DELAY_MS);
+    }
+
+    cycle();
+
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [alternatePlaceholder, defaultPlaceholder, inputValue]);
+
+  return placeholder;
+}
+
+function PrivateScopeToggle({
+  activeScope,
+  onToggle
+}: {
+  activeScope: WindowScope;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const privateActive = activeScope === "private";
+
+  return (
+    <button
+      className={`terminal-private-toggle ${privateActive ? "active" : ""}`}
+      type="button"
+      aria-label={privateActive ? "Showing private window rules" : "Show private window rules"}
+      aria-pressed={privateActive}
+      title={privateActive ? "Private Windows" : "Regular Windows"}
+      onClick={onToggle}
+    >
+      <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false" role="img">
+        <path d="M7 14h18l-3-8H10l-3 8Z" />
+        <path d="M5 14h22" />
+        <circle cx="11" cy="21" r="3.5" />
+        <circle cx="21" cy="21" r="3.5" />
+        <path d="M14.5 21h3" />
+      </svg>
+    </button>
+  );
+}
+
+function HistoryModeToggle({
+  button,
+  active,
+  onClick
+}: {
+  button: HistoryModeButton;
+  active: boolean;
+  onClick: () => void;
+}): React.JSX.Element {
+  const labels: Record<HistoryModeButton, string> = {
+    private: active ? "Showing private browsing history" : "Show private browsing history",
+    pip: active
+      ? "Showing Picture-in-Picture media history"
+      : "Show Picture-in-Picture media history",
+    background: active ? "Showing background media history" : "Show background media history"
+  };
+
+  return (
+    <button
+      className={`terminal-private-toggle ${active ? "active" : ""}`}
+      type="button"
+      aria-label={labels[button]}
+      aria-pressed={active}
+      title={labels[button]}
+      onClick={onClick}
+    >
+      {button === "private" ? (
+        <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false" role="img">
+          <path d="M7 14h18l-3-8H10l-3 8Z" />
+          <path d="M5 14h22" />
+          <circle cx="11" cy="21" r="3.5" />
+          <circle cx="21" cy="21" r="3.5" />
+          <path d="M14.5 21h3" />
+        </svg>
+      ) : button === "pip" ? (
+        <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false" role="img">
+          <rect x="5" y="7" width="22" height="16" rx="1" />
+          <rect x="16" y="14" width="8" height="6" rx="1" />
+          <path d="M9 25h14" />
+        </svg>
+      ) : (
+        <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false" role="img">
+          <path d="M8 22a8 8 0 0 1 16 0" />
+          <path d="M8 22v-5a8 8 0 0 1 16 0v5" />
+          <rect x="5" y="20" width="5" height="7" rx="1" />
+          <rect x="22" y="20" width="5" height="7" rx="1" />
+        </svg>
+      )}
+    </button>
+  );
 }
 
 function TerminalCheckbox({
@@ -548,7 +759,8 @@ function UsageBarChart({
   onSelect,
   averageMs,
   maxMs,
-  variant = "week"
+  variant = "week",
+  selectable = true
 }: {
   buckets: UsageBucket[];
   selectedId: string | null;
@@ -556,6 +768,7 @@ function UsageBarChart({
   averageMs?: number;
   maxMs?: number;
   variant?: "hourly" | "week";
+  selectable?: boolean;
 }): React.JSX.Element {
   const chartMaxMs = Math.max(
     maxMs ?? 0,
@@ -614,19 +827,27 @@ function UsageBarChart({
           </>
         ) : null}
         {buckets.map((bucket) => {
-          const canSelect = hasVisibleHistoryBar(bucket.totalMs);
-          const height = canSelect ? Math.max(2, (bucket.totalMs / chartMaxMs) * 100) : 0;
+          const hasVisibleData = hasVisibleHistoryBar(bucket.totalMs);
+          const canSelect = selectable && hasVisibleData;
+          const height = hasVisibleData ? Math.max(2, (bucket.totalMs / chartMaxMs) * 100) : 0;
           const label = `${bucket.label}, ${formatHistoryDuration(bucket.totalMs)} browsing time`;
           return (
             <button
-              className={`terminal-chart-bar ${selectedId === bucket.id ? "selected" : ""}`}
+              className={`terminal-chart-bar ${selectedId === bucket.id ? "selected" : ""} ${
+                hasVisibleData && !selectable ? "nonselectable" : ""
+              }`}
               key={bucket.id}
               type="button"
               aria-label={label}
-              aria-pressed={selectedId === bucket.id}
-              disabled={!canSelect}
+              aria-pressed={canSelect && selectedId === bucket.id}
+              aria-disabled={!canSelect}
+              disabled={!hasVisibleData}
               title={label}
-              onClick={() => onSelect(bucket.id)}
+              onClick={() => {
+                if (canSelect) {
+                  onSelect(bucket.id);
+                }
+              }}
             >
               <span
                 className="terminal-chart-bar-fill"
@@ -645,27 +866,33 @@ function UsageBarChart({
 
 function DomainBreakdown({
   title,
-  bucket
+  bucket,
+  aggregateOnly = false
 }: {
   title: string;
   bucket: UsageBucket;
+  aggregateOnly?: boolean;
 }): React.JSX.Element {
   return (
     <div className="terminal-selected-breakdown">
       <h2 className="terminal-title">{title}</h2>
       <p>Total browsing: {formatHistoryDuration(bucket.totalMs)}</p>
-      <div className="terminal-grid" style={{ marginTop: "1rem" }}>
-        {bucket.domains.length > 0 ? (
-          bucket.domains.map((row) => (
-            <React.Fragment key={row.domain}>
-              <span>{row.domain}</span>
-              <span>{formatHistoryDuration(row.durationMs)}</span>
-            </React.Fragment>
-          ))
-        ) : (
-          <span className="terminal-muted">No tracked browsing in this period</span>
-        )}
-      </div>
+      {aggregateOnly ? (
+        <p className="terminal-muted">Aggregate only. Private site details are hidden.</p>
+      ) : (
+        <div className="terminal-grid" style={{ marginTop: "1rem" }}>
+          {bucket.domains.length > 0 ? (
+            bucket.domains.map((row) => (
+              <React.Fragment key={row.domain}>
+                <span>{row.domain}</span>
+                <span>{formatHistoryDuration(row.durationMs)}</span>
+              </React.Fragment>
+            ))
+          ) : (
+            <span className="terminal-muted">No tracked browsing in this period</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -740,12 +967,18 @@ function HistoryPage(): React.JSX.Element {
   const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null);
   const [hasPreviousWeekData, setHasPreviousWeekData] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyMode, setHistoryMode] = useState<HistoryModeSelection>(DEFAULT_HISTORY_MODE);
   const now = Date.now();
   const todayStart = startOfLocalDay(now);
   const yesterdayStart = todayStart - DAY_MS;
   const currentWeekStart = startOfLocalWeek(now);
   const displayedWeekStart = currentWeekStart + weekOffset * WEEK_MS;
   const displayedWeekEnd = displayedWeekStart + WEEK_MS;
+  const historyWindowScope = historyModeToScope(historyMode);
+  const historyUsageMode = historyModeToUsageMode(historyMode);
+  const canShowDomainBreakdown = canDrillIntoHistoryMode(historyMode);
+  const emptyState = historyModeEmptyState(historyMode);
+  const hasHistoryData = sessions.length > 0;
 
   useEffect(() => {
     let mounted = true;
@@ -755,9 +988,16 @@ function HistoryPage(): React.JSX.Element {
         ? sendMessage<HistorySessionView[]>({
             type: "GET_HISTORY_INTERVAL",
             startedAt: displayedWeekStart,
-            endedAt: displayedWeekEnd
+            endedAt: displayedWeekEnd,
+            windowScope: historyWindowScope,
+            usageMode: historyUsageMode
           })
-        : sendMessage<HistorySessionView[]>({ type: "GET_HISTORY", range });
+        : sendMessage<HistorySessionView[]>({
+            type: "GET_HISTORY",
+            range,
+            windowScope: historyWindowScope,
+            usageMode: historyUsageMode
+          });
 
     historyRequest
       .then(async (next) => {
@@ -766,7 +1006,9 @@ function HistoryPage(): React.JSX.Element {
           const previous = await sendMessage<HistorySessionView[]>({
             type: "GET_HISTORY_INTERVAL",
             startedAt: previousStart,
-            endedAt: displayedWeekStart
+            endedAt: displayedWeekStart,
+            windowScope: historyWindowScope,
+            usageMode: historyUsageMode
           });
 
           if (mounted) {
@@ -792,7 +1034,7 @@ function HistoryPage(): React.JSX.Element {
     return () => {
       mounted = false;
     };
-  }, [displayedWeekEnd, displayedWeekStart, range]);
+  }, [displayedWeekEnd, displayedWeekStart, historyUsageMode, historyWindowScope, range]);
 
   const hourlyBuckets = useMemo(
     () => createHourlyUsageBuckets(sessions, range === "yesterday" ? yesterdayStart : now),
@@ -829,9 +1071,32 @@ function HistoryPage(): React.JSX.Element {
   )}`;
   const showWeekControls = hasPreviousWeekData || weekOffset < 0;
 
+  function setHistoryModeButton(button: HistoryModeButton): void {
+    setHistoryMode((current) => toggleHistoryMode(current, button));
+  }
+
   return (
     <section className="terminal-section">
-      <h1 className="terminal-title">History</h1>
+      <div className="terminal-history-heading">
+        <h1 className="terminal-title">History</h1>
+        <div className="terminal-history-mode-buttons" aria-label="History mode">
+          <HistoryModeToggle
+            button="private"
+            active={historyMode.private}
+            onClick={() => setHistoryModeButton("private")}
+          />
+          <HistoryModeToggle
+            button="pip"
+            active={historyMode.mediaMode === "pip"}
+            onClick={() => setHistoryModeButton("pip")}
+          />
+          <HistoryModeToggle
+            button="background"
+            active={historyMode.mediaMode === "background"}
+            onClick={() => setHistoryModeButton("background")}
+          />
+        </div>
+      </div>
       <div className="terminal-tabs">
         {(["today", "yesterday", "last-7-days"] as const).map((option) => (
           <button
@@ -890,10 +1155,17 @@ function HistoryPage(): React.JSX.Element {
                 <DomainBreakdown
                   title={fullDateFormatter.format(new Date(selectedDailyBucket.start))}
                   bucket={selectedDailyBucket}
+                  aggregateOnly={!canShowDomainBreakdown}
                 />
               </div>
             ) : (
-              <p className="terminal-muted">Select a day to see site totals.</p>
+              <p className="terminal-muted">
+                {canShowDomainBreakdown
+                  ? "Select a day to see site totals."
+                  : hasHistoryData
+                    ? "Select a day to see aggregate total."
+                    : emptyState}
+              </p>
             )}
           </>
         ) : (
@@ -910,11 +1182,19 @@ function HistoryPage(): React.JSX.Element {
                 className="terminal-history-panel"
                 onPointerDown={() => setSelectedBucketId(null)}
               >
-                <DomainBreakdown title={selectedHourlyBucket.label} bucket={selectedHourlyBucket} />
+                <DomainBreakdown
+                  title={selectedHourlyBucket.label}
+                  bucket={selectedHourlyBucket}
+                  aggregateOnly={!canShowDomainBreakdown}
+                />
               </div>
             ) : panelMode === "today-sessions" ? (
               <div className="terminal-list" style={{ marginTop: "2rem" }}>
-                {sessions.length > 0 ? (
+                {!canShowDomainBreakdown ? (
+                  <p className="terminal-muted">
+                    {hasHistoryData ? "Select an hour to see aggregate total." : emptyState}
+                  </p>
+                ) : sessions.length > 0 ? (
                   sessions.map((session) => (
                     <div className="terminal-list-row" key={session.id}>
                       <span>
@@ -924,11 +1204,17 @@ function HistoryPage(): React.JSX.Element {
                     </div>
                   ))
                 ) : (
-                  <p className="terminal-muted">No sessions in this range</p>
+                  <p className="terminal-muted">{emptyState}</p>
                 )}
               </div>
             ) : (
-              <p className="terminal-muted">Select an hour to see site totals.</p>
+              <p className="terminal-muted">
+                {canShowDomainBreakdown
+                  ? "Select an hour to see site totals."
+                  : hasHistoryData
+                    ? "Select an hour to see aggregate total."
+                    : emptyState}
+              </p>
             )}
           </>
         )}
@@ -950,13 +1236,22 @@ function BlockedSitesPage({
   const [editingInput, setEditingInput] = useState("");
   const [editingSchedule, setEditingSchedule] = useState<ScheduleConfig>(ALWAYS_SCHEDULE);
   const [error, setError] = useState<string | null>(null);
+  const [windowScopeView, setWindowScopeView] = useState<WindowScope>("regular");
+  const visibleBlockedDomains = useMemo(
+    () =>
+      (settings?.blockedDomains ?? []).filter(
+        (blocked) => normalizeWindowScope(blocked.windowScope) === windowScopeView
+      ),
+    [settings?.blockedDomains, windowScopeView]
+  );
 
   async function blockDomain(): Promise<void> {
     try {
       const next = await sendMessage<ExtensionSettings>({
         type: "ADD_BLOCKED_DOMAIN",
         input,
-        schedule
+        schedule,
+        windowScope: windowScopeView
       });
       setInput("");
       setSchedule(ALWAYS_SCHEDULE);
@@ -999,7 +1294,8 @@ function BlockedSitesPage({
         type: "UPDATE_BLOCKED_DOMAIN",
         id,
         input: editingInput,
-        schedule: editingSchedule
+        schedule: editingSchedule,
+        windowScope: windowScopeView
       });
       setEditingId(null);
       setError(null);
@@ -1011,11 +1307,23 @@ function BlockedSitesPage({
 
   return (
     <section className="terminal-section">
-      <h1 className="terminal-title">Blocked Sites</h1>
+      <div className="terminal-page-heading">
+        <div>
+          <h1 className="terminal-title">Blocked Sites</h1>
+        </div>
+        <PrivateScopeToggle
+          activeScope={windowScopeView}
+          onToggle={() =>
+            setWindowScopeView((current) => (current === "regular" ? "private" : "regular"))
+          }
+        />
+      </div>
       <div className="terminal-input-row">
         <input
           aria-label="Website domain"
-          placeholder="Enter website..."
+          placeholder={
+            windowScopeView === "private" ? "Enter private-window website..." : "Enter website..."
+          }
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
@@ -1033,8 +1341,8 @@ function BlockedSitesPage({
       {error ? <p className="terminal-error">{error}</p> : null}
 
       <div className="terminal-list" style={{ marginTop: "2rem" }}>
-        {settings?.blockedDomains.length ? (
-          settings.blockedDomains.map((blocked) => (
+        {visibleBlockedDomains.length ? (
+          visibleBlockedDomains.map((blocked) => (
             <div className="terminal-rule" key={blocked.id}>
               <div className="terminal-list-row">
                 <span className="terminal-rule-copy">
@@ -1115,6 +1423,27 @@ function TimeLimitsPage({
   const [editingLimitMinutes, setEditingLimitMinutes] = useState(30);
   const [editingSchedule, setEditingSchedule] = useState<ScheduleConfig>(ALWAYS_SCHEDULE);
   const [error, setError] = useState<string | null>(null);
+  const [windowScopeView, setWindowScopeView] = useState<WindowScope>("regular");
+  const placeholder = useCyclingTypedPlaceholder(input, windowScopeView === "private");
+  const selectedTimeLimitOptions =
+    windowScopeView === "private" ? privateTimeLimitOptions : timeLimitOptions;
+  const visibleTimeLimits = useMemo(
+    () =>
+      (settings?.timeLimitedDomains ?? []).filter(
+        (limited) => normalizeWindowScope(limited.windowScope) === windowScopeView
+      ),
+    [settings?.timeLimitedDomains, windowScopeView]
+  );
+
+  useEffect(() => {
+    if (windowScopeView === "regular" && limitMinutes === 0) {
+      setLimitMinutes(1);
+    }
+
+    if (windowScopeView === "regular" && editingLimitMinutes === 0) {
+      setEditingLimitMinutes(1);
+    }
+  }, [editingLimitMinutes, limitMinutes, windowScopeView]);
 
   async function addLimit(): Promise<void> {
     try {
@@ -1122,7 +1451,8 @@ function TimeLimitsPage({
         type: "ADD_TIME_LIMITED_DOMAIN",
         input,
         limitMinutes,
-        schedule
+        schedule,
+        windowScope: windowScopeView
       });
       setInput("");
       setSchedule(ALWAYS_SCHEDULE);
@@ -1161,7 +1491,8 @@ function TimeLimitsPage({
       id,
       input: nextInput,
       limitMinutes: nextLimitMinutes,
-      schedule: nextSchedule
+      schedule: nextSchedule,
+      windowScope: windowScopeView
     });
     onSettingsChanged(next);
   }
@@ -1173,7 +1504,7 @@ function TimeLimitsPage({
     }
 
     setEditingId(limited.id);
-    setEditingInput(limited.domain);
+    setEditingInput(limited.domain ?? "");
     setEditingLimitMinutes(limited.limitMinutes);
     setEditingSchedule(limited.schedule);
     setError(null);
@@ -1191,11 +1522,21 @@ function TimeLimitsPage({
 
   return (
     <section className="terminal-section">
-      <h1 className="terminal-title">Time Limits</h1>
+      <div className="terminal-page-heading">
+        <div>
+          <h1 className="terminal-title">Time Limits</h1>
+        </div>
+        <PrivateScopeToggle
+          activeScope={windowScopeView}
+          onToggle={() =>
+            setWindowScopeView((current) => (current === "regular" ? "private" : "regular"))
+          }
+        />
+      </div>
       <div className="terminal-input-row terminal-input-row-three">
         <input
           aria-label="Website domain"
-          placeholder="Enter website..."
+          placeholder={placeholder}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
@@ -1207,7 +1548,7 @@ function TimeLimitsPage({
         <TerminalSelect
           ariaLabel="Daily time limit"
           value={limitMinutes}
-          options={timeLimitOptions}
+          options={selectedTimeLimitOptions}
           onChange={setLimitMinutes}
         />
         <button className="terminal-button" type="button" onClick={() => void addLimit()}>
@@ -1219,12 +1560,12 @@ function TimeLimitsPage({
       {error ? <p className="terminal-error">{error}</p> : null}
 
       <div className="terminal-list" style={{ marginTop: "2rem" }}>
-        {settings?.timeLimitedDomains.length ? (
-          settings.timeLimitedDomains.map((limited) => (
+        {visibleTimeLimits.length ? (
+          visibleTimeLimits.map((limited) => (
             <div className="terminal-rule" key={limited.id}>
               <div className="terminal-list-row">
                 <span className="terminal-rule-copy">
-                  <span>{limited.domain}</span>
+                  <span>{timeLimitDisplayName(limited)}</span>
                   <span className="terminal-muted">
                     {formatDurationMinutes(limited.limitMinutes)} limit
                   </span>
@@ -1258,7 +1599,12 @@ function TimeLimitsPage({
                 <div className="terminal-edit-panel">
                   <div className="terminal-input-row terminal-input-row-three">
                     <input
-                      aria-label={`Edit time-limited website ${limited.domain}`}
+                      aria-label={`Edit time limit target ${timeLimitDisplayName(limited)}`}
+                      placeholder={
+                        windowScopeView === "private"
+                          ? "Leave blank for All Private Browsing"
+                          : "Leave blank for All Browsing"
+                      }
                       value={editingInput}
                       onChange={(event) => setEditingInput(event.target.value)}
                       onKeyDown={(event) => {
@@ -1268,9 +1614,9 @@ function TimeLimitsPage({
                       }}
                     />
                     <TerminalSelect
-                      ariaLabel={`Daily limit for ${limited.domain}`}
+                      ariaLabel={`Daily limit for ${timeLimitDisplayName(limited)}`}
                       value={editingLimitMinutes}
-                      options={timeLimitOptions}
+                      options={selectedTimeLimitOptions}
                       onChange={setEditingLimitMinutes}
                     />
                     <button
@@ -1315,7 +1661,8 @@ function PathwaySummaryRow({
   pathway: PathwaySummary;
   metric: string;
 }): React.JSX.Element {
-  const label = pathway.displayLabel ?? pathway.displaySegments?.join(" -> ") ?? pathway.domains.join(" -> ");
+  const label =
+    pathway.displayLabel ?? pathway.displaySegments?.join(" -> ") ?? pathway.domains.join(" -> ");
   const details = pathway.details ?? [
     { label: "raw domains", value: (pathway.rawDomains ?? pathway.domains).join(" -> ") },
     { label: "repeat count", value: `${pathway.count}x` }
@@ -1515,7 +1862,11 @@ function VisionPage(): React.JSX.Element {
             <h2 className="terminal-title">Distraction pathways</h2>
             <SummaryList empty="No pathways detected yet.">
               {report.pathways.map((pathway) => (
-                <PathwaySummaryRow key={pathway.id} pathway={pathway} metric={`${pathway.count}x`} />
+                <PathwaySummaryRow
+                  key={pathway.id}
+                  pathway={pathway}
+                  metric={`${pathway.count}x`}
+                />
               ))}
             </SummaryList>
           </section>
@@ -1815,7 +2166,28 @@ interface ConfirmationState {
   confirmLabel: string;
   confirmationText?: string;
   inputLabel?: string;
-  run: (confirmationText: string) => Promise<void>;
+  run?: (confirmationText: string) => Promise<void>;
+  actions?: Array<{
+    label: string;
+    run: () => Promise<void>;
+  }>;
+}
+
+function privateAccessInstructions(): string {
+  switch (getBrowserTarget()) {
+    case "firefox":
+      return "Firefox controls this outside 0wl. Open Add-ons and Themes, choose 0wl, then set Run in Private Windows to Allow.";
+    case "chrome":
+      return "Chrome controls this outside 0wl. Open Extensions, choose 0wl details, then enable Allow in incognito.";
+    case "edge":
+      return "Edge controls this outside 0wl. Open Extensions, choose 0wl details, then enable Allow in InPrivate.";
+    case "opera":
+      return "Opera controls this outside 0wl. Open Extensions, choose 0wl details, then enable Allow in private mode.";
+    case "safari":
+      return "Safari controls this outside 0wl. Open Safari extension settings and allow 0wl in private browsing if your Safari version supports it.";
+    case "unknown":
+      return "Your browser controls this outside 0wl. Open the browser extension settings for 0wl and allow private/incognito access.";
+  }
 }
 
 function ConfirmationDialog({
@@ -1823,13 +2195,15 @@ function ConfirmationDialog({
   resetText,
   onResetTextChange,
   onCancel,
-  onConfirm
+  onConfirm,
+  onAction
 }: {
   state: ConfirmationState;
   resetText: string;
   onResetTextChange: (value: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
+  onAction?: (action: NonNullable<ConfirmationState["actions"]>[number]) => void;
 }): React.JSX.Element {
   const requiredText = state.confirmationText;
   const disabled = requiredText !== undefined && resetText.toLowerCase() !== requiredText;
@@ -1866,17 +2240,34 @@ function ConfirmationDialog({
           />
         ) : null}
         <div className="terminal-actions">
-          <button className="terminal-button terminal-action-invert" type="button" onClick={onCancel}>
-            Cancel
-          </button>
           <button
             className="terminal-button terminal-action-invert"
             type="button"
-            disabled={disabled}
-            onClick={onConfirm}
+            onClick={onCancel}
           >
-            {state.confirmLabel}
+            Cancel
           </button>
+          {state.actions ? (
+            state.actions.map((action) => (
+              <button
+                className="terminal-button terminal-action-invert"
+                key={action.label}
+                type="button"
+                onClick={() => onAction?.(action)}
+              >
+                {action.label}
+              </button>
+            ))
+          ) : (
+            <button
+              className="terminal-button terminal-action-invert"
+              type="button"
+              disabled={disabled}
+              onClick={onConfirm}
+            >
+              {state.confirmLabel}
+            </button>
+          )}
         </div>
       </section>
     </div>
@@ -1943,13 +2334,16 @@ function DataControlSection({
   }
 
   async function importBackup(backup: DataBackup, mode: DataImportMode): Promise<void> {
-    await runDataAction(async () => {
-      await sendMessage<DataControlStatus>({
-        type: "IMPORT_DATA_BACKUP",
-        backup,
-        mode
-      });
-    }, mode === "replace" ? "Backup imported and replaced local data." : "Backup imported.");
+    await runDataAction(
+      async () => {
+        await sendMessage<DataControlStatus>({
+          type: "IMPORT_DATA_BACKUP",
+          backup,
+          mode
+        });
+      },
+      mode === "replace" ? "Backup imported and replaced local data." : "Backup imported."
+    );
   }
 
   async function readBackupFile(file: File): Promise<DataBackup> {
@@ -2020,7 +2414,8 @@ function DataControlSection({
     setResetText("");
     setConfirmation({
       title: "Export Data First",
-      message: "This prepares a local JSON backup before destructive actions. Type confirm to continue.",
+      message:
+        "This prepares a local JSON backup before destructive actions. Type confirm to continue.",
       confirmLabel: "Export Data First",
       confirmationText: "confirm",
       inputLabel: "Type confirm to export data first",
@@ -2073,7 +2468,7 @@ function DataControlSection({
       return;
     }
 
-    await confirmation.run(resetText);
+    await confirmation.run?.(resetText);
     closeConfirmation();
   }
 
@@ -2118,6 +2513,12 @@ function DataControlSection({
                   ? `${status.seedSiteCategories} seed / ${status.customSiteCategories} custom`
                   : "loading"}
               </span>
+            </div>
+            <div className="terminal-list-row">
+              <span></span>
+              <a className="terminal-button terminal-action-invert" href={APP_PRIVACY_POLICY_URL}>
+                Privacy Policy
+              </a>
             </div>
           </div>
         </section>
@@ -2198,7 +2599,9 @@ function DataControlSection({
               className="terminal-button terminal-action-invert"
               type="button"
               onClick={() => {
-                const selected = deleteSpecificOptions.find((option) => option.value === deleteTarget);
+                const selected = deleteSpecificOptions.find(
+                  (option) => option.value === deleteTarget
+                );
                 requestDelete(deleteTarget, selected?.label ?? "Clear Selected Data");
               }}
             >
@@ -2289,6 +2692,67 @@ function SettingsPage({
     });
   }
 
+  async function requestEnablePrivateTracking(): Promise<void> {
+    setResetText("");
+    setSettingsNotice(null);
+    setSettingsError(null);
+
+    const accessStatus = await getPrivateWindowAccessStatus();
+
+    if (accessStatus === "not-allowed") {
+      setConfirmation({
+        title: "Private browser access needed",
+        message: `${privateAccessInstructions()} Browser extensions do not provide a native permission prompt that 0wl can open from this toggle. After allowing access in the browser, return here and enable this setting again.`,
+        confirmLabel: "Got It"
+      });
+      return;
+    }
+
+    setConfirmation({
+      title: "Enable private browsing tracking?",
+      message:
+        accessStatus === "allowed"
+          ? "Your browser reports that 0wl can access private/incognito windows. Enable private browsing tracking and enforcement?"
+          : "0wl could not verify private/incognito access in this browser. Enable the 0wl setting only if you have also allowed private/incognito access in the browser extension settings.",
+      confirmLabel: "Enable",
+      run: async () => {
+        await updateSettings({ privateBrowserTrackingEnabled: true });
+        setSettingsNotice(
+          accessStatus === "allowed"
+            ? "Private browsing tracking enabled."
+            : "Private browsing tracking enabled. Browser access could not be verified."
+        );
+      }
+    });
+  }
+
+  function requestDisablePrivateTracking(): void {
+    setResetText("");
+    setConfirmation({
+      title: "Disable private browsing tracking?",
+      message:
+        "0wl will stop tracking and enforcing private/incognito browsing rules where your browser permits it. Do you want to delete private browsing data stored by 0wl?",
+      confirmLabel: "Disable",
+      actions: [
+        {
+          label: "Disable and keep private data",
+          run: async () => {
+            await updateSettings({ privateBrowserTrackingEnabled: false });
+            setSettingsNotice("Private browsing tracking disabled. Private data kept.");
+          }
+        },
+        {
+          label: "Disable and delete private data",
+          run: async () => {
+            await sendMessage<DataControlStatus>({ type: "CLEAR_PRIVATE_BROWSING_DATA" });
+            onSettingsChanged(await sendMessage<ExtensionSettings>({ type: "GET_SETTINGS" }));
+            setSettingsNotice("Private browsing tracking disabled. Private browsing data deleted.");
+          }
+        }
+      ]
+    });
+  }
+
   useEffect(() => {
     if (!settingsNotice) {
       return undefined;
@@ -2305,11 +2769,28 @@ function SettingsPage({
 
     try {
       setSettingsNotice(null);
-      await confirmation.run(resetText);
+      await confirmation.run?.(resetText);
       setSettingsError(null);
       closeConfirmation();
     } catch (resetError) {
-      setSettingsError(resetError instanceof Error ? resetError.message : "Unable to reset settings.");
+      setSettingsError(
+        resetError instanceof Error ? resetError.message : "Unable to reset settings."
+      );
+    }
+  }
+
+  async function runSettingsConfirmationAction(
+    action: NonNullable<ConfirmationState["actions"]>[number]
+  ): Promise<void> {
+    try {
+      setSettingsNotice(null);
+      await action.run();
+      setSettingsError(null);
+      closeConfirmation();
+    } catch (actionError) {
+      setSettingsError(
+        actionError instanceof Error ? actionError.message : "Unable to update settings."
+      );
     }
   }
 
@@ -2324,6 +2805,26 @@ function SettingsPage({
             onChange={(checked) => void updateSettings({ trackingEnabled: checked })}
           />
         </label>
+
+        <label className="terminal-list-row">
+          <span>Private browsing tracking enabled</span>
+          <TerminalCheckbox
+            checked={settings?.privateBrowserTrackingEnabled ?? false}
+            onChange={(checked) =>
+              checked ? void requestEnablePrivateTracking() : requestDisablePrivateTracking()
+            }
+          />
+        </label>
+        <div className="terminal-list-row">
+          <span>
+            see our [
+            <a className="terminal-link" href={APP_PRIVACY_POLICY_URL}>
+              privacy policy
+            </a>
+            ] for what's tracked
+          </span>
+          <span></span>
+        </div>
 
         <div className="terminal-list-row">
           <span>Idle threshold</span>
@@ -2365,6 +2866,7 @@ function SettingsPage({
           onResetTextChange={setResetText}
           onCancel={closeConfirmation}
           onConfirm={() => void confirmSettingsAction()}
+          onAction={(action) => void runSettingsConfirmationAction(action)}
         />
       ) : null}
     </section>

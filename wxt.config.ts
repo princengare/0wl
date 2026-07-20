@@ -56,6 +56,7 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: "0wl",
     description: "Local-first website usage tracking and blocking.",
+    incognito: "spanning",
     icons: iconPaths,
     action: {
       default_title: "0wl",

@@ -18,6 +18,7 @@ export function createDefaultSettings(now: number): ExtensionSettings {
   return {
     schemaVersion: 1,
     trackingEnabled: true,
+    privateBrowserTrackingEnabled: false,
     idleThresholdSeconds: DEFAULT_IDLE_THRESHOLD_SECONDS,
     blockedDomains: [],
     timeLimitedDomains: [],
@@ -35,6 +36,7 @@ export function createDefaultRuntimeState(now: number): PersistedTrackingState {
     activeTabId: null,
     activeWindowId: null,
     domain: null,
+    windowScope: null,
     sessionStartedAt: null,
     lastTransitionAt: now,
     revision: 0

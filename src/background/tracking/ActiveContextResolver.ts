@@ -1,7 +1,9 @@
 import { normalizeDomainFromUrl } from "@/shared/domain";
 import { browser as extensionBrowser } from "@/shared/browser";
 import { isTrackableUrl } from "@/shared/url";
+import { isAppSurfaceUrl } from "@/shared/appSurface";
 import { queryIdleState } from "@/platform/idleApi";
+import { windowScopeFromTab } from "@/platform/windowScope";
 import type { ActiveBrowserContext, ExtensionSettings } from "@/shared/types";
 
 export class ActiveContextResolver {
@@ -15,8 +17,9 @@ export class ActiveContextResolver {
     const activeTab = focusedWindow?.tabs?.find((tab) => tab.active) ?? null;
     const url = activeTab?.url ?? null;
     const domain = url && isTrackableUrl(url) ? normalizeDomainFromUrl(url) : null;
+    const windowScope = windowScopeFromTab(activeTab);
     const ignoredDomains = new Set(settings.ignoredDomains);
-    const trackable = Boolean(domain && !ignoredDomains.has(domain));
+    const trackable = Boolean(domain && !ignoredDomains.has(domain) && !isAppSurfaceUrl(url));
 
     return {
       browserFocused: Boolean(focusedWindow),
@@ -25,6 +28,7 @@ export class ActiveContextResolver {
       activeWindowId: focusedWindow?.id ?? null,
       url,
       domain,
+      windowScope,
       trackable
     };
   }

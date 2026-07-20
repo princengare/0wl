@@ -4,15 +4,19 @@
 
 ## What Stays Local
 
-The extension stores data locally in Firefox extension storage:
+The extension stores data locally in browser extension storage:
 
 - normalized domains
 - completed usage sessions
 - daily usage aggregates
+- Picture-in-Picture and background media sessions
 - blocked domains
 - time-limited domains
+- schedules for blocks, limits, and friction rules
 - blocked-attempt counts
+- Vision categories, events, summaries, and recommendations
 - runtime tracking state
+- settings and local Data Control metadata
 
 ## What 0wl Does Not Store in V1
 
@@ -26,6 +30,26 @@ The extension stores data locally in Firefox extension storage:
 - accounts
 - passwords
 - cloud data
+- page content
+- keystrokes
+
+## Private and Incognito Windows
+
+Private/incognito tracking is off by default. If you enable it in 0wl and your browser also allows 0wl to run in private/incognito windows, 0wl can track and enforce rules in that private/incognito context.
+
+Private/incognito rules and usage are scope-aware where the app supports separate scopes.
+
+## App Surface Exclusion
+
+The public 0wl documentation and privacy-policy pages at `https://princengare.github.io/0wl/` are treated as app/documentation surfaces and are excluded from active browsing and media tracking.
+
+0wl links to the public privacy policy from private browsing tracking settings and Data Control.
+
+## Data Control
+
+Settings includes local Data Control tools for viewing local data status, exporting a JSON backup, importing backups, choosing retention, deleting specific local data categories, and resetting local data after confirmation.
+
+Exported backup files may contain sensitive browsing patterns. Keep them private and do not commit them.
 
 ## Network Policy
 

@@ -19,6 +19,7 @@ import { getDateKey, startOfLocalDay } from "@/shared/time";
 import { isPlainObject } from "@/shared/validation";
 import { setIdleDetectionInterval } from "@/platform/idleApi";
 import { createDefaultSettings } from "@/storage/defaults";
+import { normalizeWindowScope } from "@/platform/windowScope";
 import type { BlockRuleManager } from "../blocking/BlockRuleManager";
 import type { TimeLimitManager } from "../timeLimits/TimeLimitManager";
 import type { TrackingEngine } from "../tracking/TrackingEngine";
@@ -107,16 +108,27 @@ function minFinite(values: Array<number | null | undefined>): number | null {
   return finite.length > 0 ? Math.min(...finite) : null;
 }
 
-function mergeByDomain<T extends { domain: string }>(current: T[], incoming: T[]): T[] {
-  const byDomain = new Map(current.map((item) => [item.domain, item]));
+function mergeDomainKey(item: { domain: string | null; windowScope?: unknown; targetType?: unknown }): string {
+  return `${normalizeWindowScope(item.windowScope)}::${String(item.targetType ?? "domain")}::${
+    item.domain ?? "all-browsing"
+  }`;
+}
+
+function mergeByDomain<T extends { domain: string | null; windowScope?: unknown; targetType?: unknown }>(
+  current: T[],
+  incoming: T[]
+): T[] {
+  const byDomain = new Map(current.map((item) => [mergeDomainKey(item), item]));
 
   for (const item of incoming) {
-    if (typeof item?.domain === "string") {
-      byDomain.set(item.domain, item);
+    if (typeof item?.domain === "string" || item?.domain === null) {
+      byDomain.set(mergeDomainKey(item), item);
     }
   }
 
-  return [...byDomain.values()].sort((a, b) => a.domain.localeCompare(b.domain));
+  return [...byDomain.values()].sort((a, b) =>
+    (a.domain ?? "All Browsing").localeCompare(b.domain ?? "All Browsing")
+  );
 }
 
 function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
@@ -189,6 +201,10 @@ async function keepRows<T>(storeName: StoreName, keep: (row: T) => boolean): Pro
     storeName,
     rows.filter((row) => keep(row))
   );
+}
+
+function isPrivateScoped(row: { windowScope?: unknown }): boolean {
+  return normalizeWindowScope(row.windowScope) === "private";
 }
 
 export class DataControlService {
@@ -313,6 +329,27 @@ export class DataControlService {
         throw new Error("Choose a valid data type to delete.");
     }
 
+    await this.refreshSideEffects();
+    return this.getStatus();
+  }
+
+  async clearPrivateBrowsingData(): Promise<DataControlStatus> {
+    await keepRows<UsageSession>(STORE_SESSIONS, (session) => !isPrivateScoped(session));
+    await keepRows<DailyUsage>(STORE_DAILY_USAGE, (row) => !isPrivateScoped(row));
+    await keepRows<BlockAttempt>(STORE_BLOCK_ATTEMPTS, (attempt) => !isPrivateScoped(attempt));
+    await keepRows<DomainTransition & { windowScope?: unknown }>(
+      STORE_DOMAIN_TRANSITIONS,
+      (transition) => !isPrivateScoped(transition)
+    );
+    await keepRows<{ windowScope?: unknown }>(
+      STORE_BROWSING_INTENTS,
+      (intent) => !isPrivateScoped(intent)
+    );
+    await this.dependencies.settingsStore.update(
+      { privateBrowserTrackingEnabled: false },
+      this.now()
+    );
+    await this.dependencies.runtimeStateStore.resetInactive(this.now());
     await this.refreshSideEffects();
     return this.getStatus();
   }
@@ -475,7 +512,11 @@ export class DataControlService {
     const settings = await this.dependencies.settingsStore.get(now);
     const visionSettings = await this.dependencies.visionSettingsStore.get(now);
     setIdleDetectionInterval(settings.idleThresholdSeconds);
-    await this.dependencies.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+    await this.dependencies.blockRuleManager.refreshDynamicRules(
+      settings.blockedDomains,
+      now,
+      settings.privateBrowserTrackingEnabled
+    );
     await this.dependencies.timeLimitManager.refresh();
     await this.dependencies.frictionRuleManager.refreshDynamicRules(visionSettings.frictionRules);
     await this.dependencies.trackingEngine.reconcileTrackingState(

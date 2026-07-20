@@ -4,6 +4,15 @@ All notable changes to 0wl will be documented in this file.
 
 The project follows semantic versioning once public releases begin.
 
+## 0.1.5
+
+- Marked 0.1.5 as the Mozilla-approved Firefox Add-ons release in documentation.
+- Added privacy-policy links from the private browsing tracking setting and Settings Data Control.
+- Treats the public 0wl documentation/privacy site as an app surface so viewing it is excluded from active browsing and media tracking.
+- Refined Picture-in-Picture and background media tracking so ordinary non-active video records as background media while detected PiP records separately.
+- Shows live Picture-in-Picture and background media sessions in History before playback stops.
+- Updated the public project site and privacy policy for the implemented media buckets and privacy-policy access paths.
+
 ## 0.1.4
 
 - Added Settings Data Control with local data status, JSON export, backup import, confirmed retention cleanup, specific delete actions, and typed full-reset confirmation.

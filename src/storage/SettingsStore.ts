@@ -2,11 +2,14 @@ import { normalizeDomain } from "@/shared/domain";
 import { SETTINGS_STORAGE_KEY, createDefaultSettings } from "./defaults";
 import { ALWAYS_SCHEDULE, normalizeSchedule } from "@/shared/schedule";
 import { browser as extensionBrowser } from "@/shared/browser";
+import { normalizeWindowScope } from "@/platform/windowScope";
 import type {
   BlockedDomain,
   ExtensionSettings,
   ScheduleConfig,
-  TimeLimitedDomain
+  TimeLimitedDomain,
+  TimeLimitTargetType,
+  WindowScope
 } from "@/shared/types";
 import { DEFAULT_IDLE_THRESHOLD_SECONDS } from "@/shared/constants";
 import {
@@ -40,7 +43,7 @@ function createBlockedDomainId(domain: string, now: number, existingIds: Set<str
   return `${domain}-${now}`;
 }
 
-function createTimeLimitedDomainId(domain: string, now: number, existingIds: Set<string>): string {
+function createTimeLimitedDomainId(targetKey: string, now: number, existingIds: Set<string>): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     const id = crypto.randomUUID();
     if (!existingIds.has(id)) {
@@ -48,11 +51,51 @@ function createTimeLimitedDomainId(domain: string, now: number, existingIds: Set
     }
   }
 
-  return `limit-${domain}-${now}`;
+  return `limit-${targetKey}-${now}`;
 }
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function scopedDomainKey(domain: string, windowScope: WindowScope): string {
+  return `${windowScope}::${domain}`;
+}
+
+function timeLimitTargetKey(
+  targetType: TimeLimitTargetType,
+  domain: string | null,
+  windowScope: WindowScope
+): string {
+  return `${windowScope}::${targetType}::${domain ?? "all-browsing"}`;
+}
+
+function globalLimitLabel(windowScope: WindowScope): string {
+  return windowScope === "private" ? "All Private Browsing" : "All Browsing";
+}
+
+function isAllowedTimeLimitMinutesForScope(
+  limitMinutes: unknown,
+  windowScope: WindowScope
+): limitMinutes is number {
+  return isValidTimeLimitMinutes(limitMinutes) && (limitMinutes > 0 || windowScope === "private");
+}
+
+function resolveTimeLimitInput(input: string): {
+  targetType: TimeLimitTargetType;
+  domain: string | null;
+} {
+  if (input.trim().length === 0) {
+    return {
+      targetType: "global",
+      domain: null
+    };
+  }
+
+  return {
+    targetType: "domain",
+    domain: normalizeDomain(input)
+  };
 }
 
 function normalizeBlockedDomains(value: unknown): {
@@ -79,6 +122,7 @@ function normalizeBlockedDomains(value: unknown): {
     }
 
     let domain: string;
+    const windowScope = normalizeWindowScope(candidate.windowScope);
 
     try {
       domain = normalizeDomain(candidate.domain);
@@ -87,7 +131,9 @@ function normalizeBlockedDomains(value: unknown): {
       continue;
     }
 
-    if (seenDomains.has(domain)) {
+    const key = scopedDomainKey(domain, windowScope);
+
+    if (seenDomains.has(key)) {
       changed = true;
       continue;
     }
@@ -102,13 +148,18 @@ function normalizeBlockedDomains(value: unknown): {
     blockedDomains.push({
       id,
       domain,
+      windowScope,
       enabled: candidate.enabled,
       schedule: schedule.schedule,
       createdAt: candidate.createdAt
     });
-    seenDomains.add(domain);
+    seenDomains.add(key);
 
-    changed ||= id !== candidate.id || domain !== candidate.domain || schedule.changed;
+    changed ||=
+      id !== candidate.id ||
+      domain !== candidate.domain ||
+      windowScope !== candidate.windowScope ||
+      schedule.changed;
   }
 
   return { blockedDomains, changed };
@@ -122,16 +173,14 @@ function normalizeTimeLimitedDomains(value: unknown): {
     return { timeLimitedDomains: [], changed: true };
   }
 
-  const seenDomains = new Set<string>();
+  const seenTargets = new Set<string>();
   const timeLimitedDomains: TimeLimitedDomain[] = [];
   let changed = false;
 
   for (const candidate of value) {
     if (
       !isPlainObject(candidate) ||
-      typeof candidate.domain !== "string" ||
       typeof candidate.enabled !== "boolean" ||
-      !isValidTimeLimitMinutes(candidate.limitMinutes) ||
       !isFiniteNumber(candidate.createdAt) ||
       !(candidate.bypassUntil === null || isFiniteNumber(candidate.bypassUntil))
     ) {
@@ -139,16 +188,32 @@ function normalizeTimeLimitedDomains(value: unknown): {
       continue;
     }
 
-    let domain: string;
+    let domain: string | null = null;
+    const targetType: TimeLimitTargetType = candidate.targetType === "global" ? "global" : "domain";
+    const windowScope = normalizeWindowScope(candidate.windowScope);
+
+    if (!isAllowedTimeLimitMinutesForScope(candidate.limitMinutes, windowScope)) {
+      changed = true;
+      continue;
+    }
 
     try {
-      domain = normalizeDomain(candidate.domain);
+      if (targetType === "domain") {
+        if (typeof candidate.domain !== "string") {
+          changed = true;
+          continue;
+        }
+
+        domain = normalizeDomain(candidate.domain);
+      }
     } catch {
       changed = true;
       continue;
     }
 
-    if (seenDomains.has(domain)) {
+    const key = timeLimitTargetKey(targetType, domain, windowScope);
+
+    if (seenTargets.has(key)) {
       changed = true;
       continue;
     }
@@ -156,22 +221,29 @@ function normalizeTimeLimitedDomains(value: unknown): {
     const id =
       typeof candidate.id === "string" && candidate.id.trim().length > 0
         ? candidate.id
-        : `limit-${domain}-${candidate.createdAt}`;
+        : `limit-${key}-${candidate.createdAt}`;
 
     const schedule = normalizeSchedule(candidate.schedule);
 
     timeLimitedDomains.push({
       id,
       domain,
+      targetType,
+      windowScope,
       enabled: candidate.enabled,
       limitMinutes: candidate.limitMinutes,
       schedule: schedule.schedule,
       createdAt: candidate.createdAt,
       bypassUntil: candidate.bypassUntil
     });
-    seenDomains.add(domain);
+    seenTargets.add(key);
 
-    changed ||= id !== candidate.id || domain !== candidate.domain || schedule.changed;
+    changed ||=
+      id !== candidate.id ||
+      domain !== candidate.domain ||
+      targetType !== candidate.targetType ||
+      windowScope !== candidate.windowScope ||
+      schedule.changed;
   }
 
   return { timeLimitedDomains, changed };
@@ -230,6 +302,10 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
   const limited = normalizeTimeLimitedDomains(value.timeLimitedDomains);
   const ignored = normalizeIgnoredDomains(value.ignoredDomains);
   const trackingEnabled = typeof value.trackingEnabled === "boolean" ? value.trackingEnabled : true;
+  const privateBrowserTrackingEnabled =
+    typeof value.privateBrowserTrackingEnabled === "boolean"
+      ? value.privateBrowserTrackingEnabled
+      : false;
   const idleThresholdSeconds = isValidIdleThreshold(value.idleThresholdSeconds)
     ? value.idleThresholdSeconds
     : DEFAULT_IDLE_THRESHOLD_SECONDS;
@@ -245,6 +321,7 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
     limited.changed ||
     ignored.changed ||
     trackingEnabled !== value.trackingEnabled ||
+    privateBrowserTrackingEnabled !== value.privateBrowserTrackingEnabled ||
     idleThresholdSeconds !== value.idleThresholdSeconds ||
     showBlockedAttemptCount !== value.showBlockedAttemptCount ||
     historyRetentionDays !== value.historyRetentionDays ||
@@ -255,6 +332,7 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
     settings: {
       schemaVersion: 1,
       trackingEnabled,
+      privateBrowserTrackingEnabled,
       idleThresholdSeconds,
       blockedDomains: blocked.blockedDomains,
       timeLimitedDomains: limited.timeLimitedDomains,
@@ -307,6 +385,7 @@ export class SettingsStore {
       Pick<
         ExtensionSettings,
         | "trackingEnabled"
+        | "privateBrowserTrackingEnabled"
         | "idleThresholdSeconds"
         | "showBlockedAttemptCount"
         | "ignoredDomains"
@@ -322,6 +401,10 @@ export class SettingsStore {
         typeof changes.trackingEnabled === "boolean"
           ? changes.trackingEnabled
           : current.trackingEnabled,
+      privateBrowserTrackingEnabled:
+        typeof changes.privateBrowserTrackingEnabled === "boolean"
+          ? changes.privateBrowserTrackingEnabled
+          : current.privateBrowserTrackingEnabled,
       idleThresholdSeconds: isValidIdleThreshold(changes.idleThresholdSeconds)
         ? changes.idleThresholdSeconds
         : current.idleThresholdSeconds,
@@ -343,12 +426,18 @@ export class SettingsStore {
   async addBlockedDomain(
     input: string,
     now = Date.now(),
-    scheduleInput: ScheduleConfig = ALWAYS_SCHEDULE
+    scheduleInput: ScheduleConfig = ALWAYS_SCHEDULE,
+    windowScopeInput: WindowScope = "regular"
   ): Promise<BlockedDomain> {
     const domain = normalizeDomain(input);
+    const windowScope = normalizeWindowScope(windowScopeInput);
     const settings = await this.get(now);
 
-    if (settings.blockedDomains.some((blocked) => blocked.domain === domain)) {
+    if (
+      settings.blockedDomains.some(
+        (blocked) => blocked.domain === domain && blocked.windowScope === windowScope
+      )
+    ) {
       throw new Error(`${domain} is already blocked.`);
     }
 
@@ -359,6 +448,7 @@ export class SettingsStore {
         new Set(settings.blockedDomains.map((blocked) => blocked.id))
       ),
       domain,
+      windowScope,
       enabled: true,
       schedule: normalizeSchedule(scheduleInput).schedule,
       createdAt: now
@@ -397,16 +487,25 @@ export class SettingsStore {
     id: string,
     input: string,
     scheduleInput: ScheduleConfig,
-    now = Date.now()
+    now = Date.now(),
+    windowScopeInput?: WindowScope
   ): Promise<void> {
     const domain = normalizeDomain(input);
     const settings = await this.get(now);
+    const existing = settings.blockedDomains.find((blocked) => blocked.id === id);
 
-    if (!settings.blockedDomains.some((blocked) => blocked.id === id)) {
+    if (!existing) {
       throw new Error("Blocked domain not found.");
     }
 
-    if (settings.blockedDomains.some((blocked) => blocked.id !== id && blocked.domain === domain)) {
+    const windowScope = normalizeWindowScope(windowScopeInput ?? existing.windowScope);
+
+    if (
+      settings.blockedDomains.some(
+        (blocked) =>
+          blocked.id !== id && blocked.domain === domain && blocked.windowScope === windowScope
+      )
+    ) {
       throw new Error(`${domain} is already blocked.`);
     }
 
@@ -414,7 +513,7 @@ export class SettingsStore {
     await this.save({
       ...settings,
       blockedDomains: settings.blockedDomains.map((blocked) =>
-        blocked.id === id ? { ...blocked, domain, schedule } : blocked
+        blocked.id === id ? { ...blocked, domain, windowScope, schedule } : blocked
       ),
       updatedAt: now
     });
@@ -436,35 +535,52 @@ export class SettingsStore {
     });
   }
 
-  async getEnabledBlockedDomains(now = Date.now()): Promise<BlockedDomain[]> {
+  async getEnabledBlockedDomains(
+    now = Date.now(),
+    windowScope?: WindowScope
+  ): Promise<BlockedDomain[]> {
     const settings = await this.get(now);
-    return settings.blockedDomains.filter((blocked) => blocked.enabled);
+    return settings.blockedDomains.filter(
+      (blocked) => blocked.enabled && (!windowScope || blocked.windowScope === windowScope)
+    );
   }
 
   async addTimeLimitedDomain(
     input: string,
     limitMinutes: number,
     now = Date.now(),
-    scheduleInput: ScheduleConfig = ALWAYS_SCHEDULE
+    scheduleInput: ScheduleConfig = ALWAYS_SCHEDULE,
+    windowScopeInput: WindowScope = "regular"
   ): Promise<TimeLimitedDomain> {
-    if (!isValidTimeLimitMinutes(limitMinutes)) {
+    const windowScope = normalizeWindowScope(windowScopeInput);
+
+    if (!isAllowedTimeLimitMinutesForScope(limitMinutes, windowScope)) {
       throw new Error("Choose a supported time limit.");
     }
 
-    const domain = normalizeDomain(input);
+    const { targetType, domain } = resolveTimeLimitInput(input);
     const settings = await this.get(now);
+    const targetKey = timeLimitTargetKey(targetType, domain, windowScope);
+    const label = domain ?? globalLimitLabel(windowScope);
 
-    if (settings.timeLimitedDomains.some((limited) => limited.domain === domain)) {
-      throw new Error(`${domain} already has a time limit.`);
+    if (
+      settings.timeLimitedDomains.some(
+        (limited) =>
+          timeLimitTargetKey(limited.targetType, limited.domain, limited.windowScope) === targetKey
+      )
+    ) {
+      throw new Error(`${label} already has a time limit.`);
     }
 
     const timeLimitedDomain: TimeLimitedDomain = {
       id: createTimeLimitedDomainId(
-        domain,
+        targetKey,
         now,
         new Set(settings.timeLimitedDomains.map((limited) => limited.id))
       ),
       domain,
+      targetType,
+      windowScope,
       enabled: true,
       limitMinutes,
       schedule: normalizeSchedule(scheduleInput).schedule,
@@ -506,24 +622,37 @@ export class SettingsStore {
     limitMinutes: number,
     scheduleInput?: ScheduleConfig,
     now = Date.now(),
-    input?: string
+    input?: string,
+    windowScopeInput?: WindowScope
   ): Promise<void> {
-    if (!isValidTimeLimitMinutes(limitMinutes)) {
-      throw new Error("Choose a supported time limit.");
-    }
-
     const settings = await this.get(now);
-    const domain = input ? normalizeDomain(input) : null;
+    const existing = settings.timeLimitedDomains.find((limited) => limited.id === id);
 
-    if (!settings.timeLimitedDomains.some((limited) => limited.id === id)) {
+    if (!existing) {
       throw new Error("Time limit not found.");
     }
 
+    const windowScope = normalizeWindowScope(windowScopeInput ?? existing.windowScope);
+
+    if (!isAllowedTimeLimitMinutesForScope(limitMinutes, windowScope)) {
+      throw new Error("Choose a supported time limit.");
+    }
+
+    const resolved =
+      input === undefined
+        ? { targetType: existing.targetType, domain: existing.domain }
+        : resolveTimeLimitInput(input);
+    const targetKey = timeLimitTargetKey(resolved.targetType, resolved.domain, windowScope);
+    const label = resolved.domain ?? globalLimitLabel(windowScope);
+
     if (
-      domain &&
-      settings.timeLimitedDomains.some((limited) => limited.id !== id && limited.domain === domain)
+      settings.timeLimitedDomains.some(
+        (limited) =>
+          limited.id !== id &&
+          timeLimitTargetKey(limited.targetType, limited.domain, limited.windowScope) === targetKey
+      )
     ) {
-      throw new Error(`${domain} already has a time limit.`);
+      throw new Error(`${label} already has a time limit.`);
     }
 
     await this.save({
@@ -532,7 +661,9 @@ export class SettingsStore {
         limited.id === id
           ? {
               ...limited,
-              domain: domain ?? limited.domain,
+              domain: resolved.domain,
+              targetType: resolved.targetType,
+              windowScope,
               limitMinutes,
               schedule: scheduleInput
                 ? normalizeSchedule(scheduleInput).schedule
@@ -546,14 +677,24 @@ export class SettingsStore {
   }
 
   async setTimeLimitBypass(
-    domainInput: string,
+    domainInput: string | undefined,
     bypassUntil: number,
-    now = Date.now()
+    now = Date.now(),
+    targetTypeInput: TimeLimitTargetType = "domain",
+    windowScopeInput: WindowScope = "regular"
   ): Promise<void> {
-    const domain = normalizeDomain(domainInput);
+    const { targetType, domain } =
+      targetTypeInput === "global"
+        ? { targetType: "global" as const, domain: null }
+        : resolveTimeLimitInput(domainInput ?? "");
+    const windowScope = normalizeWindowScope(windowScopeInput);
     const settings = await this.get(now);
     const existing = settings.timeLimitedDomains.find(
-      (limited) => limited.enabled && limited.domain === domain
+      (limited) =>
+        limited.enabled &&
+        limited.targetType === targetType &&
+        limited.domain === domain &&
+        limited.windowScope === windowScope
     );
 
     if (!existing) {
@@ -563,7 +704,7 @@ export class SettingsStore {
     await this.save({
       ...settings,
       timeLimitedDomains: settings.timeLimitedDomains.map((limited) =>
-        limited.domain === domain ? { ...limited, bypassUntil } : limited
+        limited.id === existing.id ? { ...limited, bypassUntil } : limited
       ),
       updatedAt: now
     });
@@ -593,9 +734,14 @@ export class SettingsStore {
     return next;
   }
 
-  async getEnabledTimeLimitedDomains(now = Date.now()): Promise<TimeLimitedDomain[]> {
+  async getEnabledTimeLimitedDomains(
+    now = Date.now(),
+    windowScope?: WindowScope
+  ): Promise<TimeLimitedDomain[]> {
     const settings = await this.get(now);
-    return settings.timeLimitedDomains.filter((limited) => limited.enabled);
+    return settings.timeLimitedDomains.filter(
+      (limited) => limited.enabled && (!windowScope || limited.windowScope === windowScope)
+    );
   }
 
   async save(settings: ExtensionSettings): Promise<void> {

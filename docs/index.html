@@ -19,6 +19,7 @@
             >
             <a class="button" href="firefox-installation.html">install</a>
             <a class="button" href="development.html">develop</a>
+            <a class="button" href="privacy.html">privacy</a>
             <a class="button" href="release/process.html">release</a>
           </nav>
         </header>
@@ -29,15 +30,15 @@
             0wl is a standalone local-first extension for tracking active website time, blocking
             distracting domains, scheduling blocks and limits, and reviewing terminal-style history
             charts, local behavioral insights, scheduled friction, and local data controls. Version
-            0.1.4 is approved on Mozilla Add-ons and adds Settings Data Control, local backups,
-            0wl footers, concise Vision pathway summaries, and tighter confirmation UI from one
+            0.1.5 is approved on Mozilla Add-ons and adds privacy-policy links, 0wl site tracking
+            exclusion, live PiP/background media history, and media-bucket refinements from one
             shared codebase. No accounts. No backend. No cloud sync.
           </p>
           <div class="actions">
             <a class="button" href="https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/"
               >install from firefox add-ons</a
             >
-            <span class="muted">current approved release: 0.1.4</span>
+            <span class="muted">current approved release: 0.1.5</span>
           </div>
         </section>
 
@@ -61,8 +62,8 @@
             <div class="card">
               <span>bundled font</span>
               <span class="muted"
-                >Extension pages and this site use bundled JetBrains Mono with <code>ss01</code>
-                and slashed-zero features.</span
+                >Extension pages and this site use bundled JetBrains Mono with <code>ss01</code> and
+                slashed-zero features.</span
               >
             </div>
             <div class="card">
@@ -76,6 +77,28 @@
               <span>history alignment</span>
               <span class="muted"
                 >The weekly average line now sits at the computed chart value.</span
+              >
+            </div>
+            <div class="card">
+              <span>media buckets</span>
+              <span class="muted"
+                >Picture-in-Picture and background media are tracked separately from active browsing
+                where browser APIs expose PiP state, and live media sessions appear before playback
+                stops.</span
+              >
+            </div>
+            <div class="card">
+              <span>privacy links</span>
+              <span class="muted"
+                >Private browsing tracking and Data Control link directly to the privacy
+                policy.</span
+              >
+            </div>
+            <div class="card">
+              <span>app surface exclusion</span>
+              <span class="muted"
+                >The public 0wl docs and privacy-policy pages are treated as app surfaces, not
+                browsing time.</span
               >
             </div>
             <div class="card">
@@ -155,6 +178,13 @@
               >
             </div>
             <div class="card">
+              <span>private browsing controls</span>
+              <span class="muted"
+                >Private/incognito tracking is off by default, scope-aware where browser access is
+                granted, and linked to the privacy policy.</span
+              >
+            </div>
+            <div class="card">
               <span>browser-specific builds</span>
               <span class="muted"
                 >WXT builds Firefox, Chrome, Edge, Opera, and Safari web-extension assets from the
@@ -162,31 +192,6 @@
               >
             </div>
           </div>
-        </section>
-
-        <section class="section" aria-labelledby="roadmap-title">
-          <h2 id="roadmap-title">Roadmap note</h2>
-          <p class="summary">
-            0wl should eventually separate browser activity into attention buckets instead of
-            treating everything as the same browsing time.
-          </p>
-          <div class="terminal-grid">
-            <span>active browsing</span>
-            <span>main focused HTTP/HTTPS tab while the user is active</span>
-            <span>PiP media</span>
-            <span>Picture-in-Picture media tracked separately from active browsing</span>
-            <span>background media</span>
-            <span>audio or video playing from non-active tabs</span>
-            <span>idle visible</span>
-            <span>visible page time while the user is idle</span>
-            <span>browser unfocused</span>
-            <span>browser pages open while another app has attention</span>
-          </div>
-          <p class="muted">
-            Default direction: track PiP and background media separately, do not count them toward
-            active browsing by default, and let users decide whether media exposure counts toward
-            site limits.
-          </p>
         </section>
 
         <section class="section" aria-labelledby="status-title">
@@ -207,11 +212,11 @@
             <span>bundled font</span>
             <span>JetBrains Mono ss01 zero</span>
             <span>AMO release</span>
-            <span>approved 0.1.4</span>
+            <span>approved 0.1.5</span>
             <span>vision insights</span>
-            <span>concise pathways in 0.1.4</span>
+            <span>concise pathways and live media buckets</span>
             <span>data control</span>
-            <span>local backups and confirmed cleanup</span>
+            <span>local backups, confirmed cleanup, and privacy policy link</span>
             <span>WXT builds</span>
             <span>firefox chrome edge opera safari</span>
           </div>
@@ -245,6 +250,13 @@
                 >IndexedDB, settings repair, lifecycle metadata, and update safety.</span
               >
             </a>
+            <a class="card" href="privacy.html">
+              <span>privacy policy</span>
+              <span class="muted"
+                >Local-first storage, permissions, private/incognito handling, and website
+                privacy.</span
+              >
+            </a>
             <a class="card" href="release/process.html">
               <span>release process</span>
               <span class="muted">Versioning, packaging, signing, and stable release checks.</span>
@@ -273,6 +285,7 @@
           <p class="muted">
             Open source, local-first, Firefox-approved, cross-browser build ready.
           </p>
+          <a class="button" href="privacy.html">privacy policy</a>
         </footer>
       </div>
     </main>

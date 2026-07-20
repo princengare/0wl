@@ -332,6 +332,60 @@ select option {
   font-weight: 400;
 }
 
+.terminal-page-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1.5rem;
+}
+
+.terminal-page-heading .terminal-title {
+  margin-bottom: 0.15rem;
+}
+
+.terminal-history-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.terminal-history-mode-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.terminal-private-toggle {
+  display: inline-grid;
+  width: 2.3rem;
+  height: 2.3rem;
+  place-items: center;
+  color: #f7f7f7;
+  border: 1px solid #f7f7f7;
+  background: transparent;
+}
+
+.terminal-private-toggle svg {
+  width: 1.55rem;
+  height: 1.55rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.terminal-private-toggle:hover,
+.terminal-private-toggle:focus-visible,
+.terminal-private-toggle.active {
+  color: #000000;
+  background: #f7f7f7;
+  outline: none;
+}
+
 .terminal-kpi {
   font-size: clamp(1.8rem, 5vw, 3rem);
   margin: 0;
@@ -673,6 +727,10 @@ label.terminal-list-row:has(.terminal-checkbox):focus-within .terminal-checkbox-
   cursor: default;
 }
 
+.terminal-chart-bar.nonselectable {
+  cursor: default;
+}
+
 .terminal-chart-bar-fill {
   width: min(100%, 1.25rem);
   height: var(--height);
@@ -692,7 +750,7 @@ label.terminal-list-row:has(.terminal-checkbox):focus-within .terminal-checkbox-
 }
 
 .terminal-chart-bar.selected .terminal-chart-bar-fill,
-.terminal-chart-bar:not(:disabled):hover .terminal-chart-bar-fill {
+.terminal-chart-bar:not(:disabled):not(.nonselectable):hover .terminal-chart-bar-fill {
   background: #000000;
   outline: 2px solid #f7f7f7;
 }

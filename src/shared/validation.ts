@@ -12,6 +12,7 @@ export function isValidIdleThreshold(
 
 export function isValidTimeLimitMinutes(value: unknown): value is number {
   return (
+    value === 0 ||
     value === 1 ||
     value === 5 ||
     value === 10 ||

@@ -3,6 +3,7 @@ import { BlockRuleManager } from "./blocking/BlockRuleManager";
 import { DataControlService } from "./dataControl/DataControlService";
 import { ExtensionLifecycleManager } from "./lifecycle/ExtensionLifecycleManager";
 import { registerMessageRouter } from "./messaging/messageRouter";
+import { MediaActivityTracker } from "./media/MediaActivityTracker";
 import { ActiveContextResolver } from "./tracking/ActiveContextResolver";
 import { SessionManager } from "./tracking/SessionManager";
 import { TrackingEngine } from "./tracking/TrackingEngine";
@@ -69,6 +70,11 @@ function createBackgroundServices() {
     sessionRepository,
     timeLimitRuleManager
   });
+  const mediaActivityTracker = new MediaActivityTracker({
+    settingsStore,
+    sessionRepository,
+    activeContextResolver
+  });
   const lifecycleManager = new ExtensionLifecycleManager({
     lifecycleStore,
     bootstrap
@@ -112,6 +118,7 @@ function createBackgroundServices() {
     activeContextResolver,
     sessionManager,
     trackingEngine,
+    mediaActivityTracker,
     blockAttemptRecorder,
     timeLimitManager,
     lifecycleManager
@@ -128,8 +135,13 @@ async function initializeCore(services: BackgroundServices): Promise<void> {
   const settingsMigration = await services.settingsStore.migrateStoredSettings();
   const settings = settingsMigration.settings;
   setIdleDetectionInterval(settings.idleThresholdSeconds);
-  await services.blockRuleManager.refreshDynamicRules(settings.blockedDomains);
+  await services.blockRuleManager.refreshDynamicRules(
+    settings.blockedDomains,
+    Date.now(),
+    settings.privateBrowserTrackingEnabled
+  );
   await services.timeLimitManager.refresh();
+  await services.blockRuleManager.enforceMatchingTabs(settings);
   await services.frictionRuleManager.refreshDynamicRules(
     (await services.visionSettingsStore.get()).frictionRules
   );
@@ -143,6 +155,9 @@ export async function bootstrap(reason: ReconcileReason): Promise<void> {
   const services = getBackgroundServices();
   initializationPromise ??= initializeCore(services);
   await initializationPromise;
+  await services.mediaActivityTracker.recoverConservatively(
+    reason === "startup" ? "startup" : "background-wakeup"
+  );
   await services.trackingEngine.bootstrap(reason);
 }
 
@@ -153,6 +168,7 @@ export function registerBackgroundListeners(): void {
     trackingEngine: services.trackingEngine,
     settingsStore: services.settingsStore,
     blockRuleManager: services.blockRuleManager,
+    mediaActivityTracker: services.mediaActivityTracker,
     timeLimitManager: services.timeLimitManager,
     visionSettingsStore: services.visionSettingsStore,
     frictionRuleManager: services.frictionRuleManager,

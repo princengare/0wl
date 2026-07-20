@@ -5,6 +5,7 @@ import {
   createDefaultRuntimeState
 } from "./defaults";
 import { browser as extensionBrowser } from "@/shared/browser";
+import { normalizeWindowScope } from "@/platform/windowScope";
 import type { PersistedTrackingState, RuntimeSessionMeta, StartReason } from "@/shared/types";
 import { isPlainObject } from "@/shared/validation";
 
@@ -21,6 +22,7 @@ function isPersistedTrackingState(value: unknown): value is PersistedTrackingSta
     (typeof value.activeTabId === "number" || value.activeTabId === null) &&
     (typeof value.activeWindowId === "number" || value.activeWindowId === null) &&
     (typeof value.domain === "string" || value.domain === null) &&
+    (value.windowScope === "regular" || value.windowScope === "private" || value.windowScope === null || value.windowScope === undefined) &&
     (typeof value.sessionStartedAt === "number" || value.sessionStartedAt === null) &&
     typeof value.lastTransitionAt === "number" &&
     typeof value.revision === "number"
@@ -51,7 +53,9 @@ export class RuntimeStateStore {
       unknown
     >;
     const value = result[RUNTIME_STATE_STORAGE_KEY];
-    return isPersistedTrackingState(value) ? value : createDefaultRuntimeState(now);
+    return isPersistedTrackingState(value)
+      ? { ...value, windowScope: value.windowScope ? normalizeWindowScope(value.windowScope) : null }
+      : createDefaultRuntimeState(now);
   }
 
   async set(state: PersistedTrackingState): Promise<void> {

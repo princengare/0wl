@@ -95,15 +95,31 @@ describe("extension lifecycle and migrations", () => {
     expect(migration.changed).toBe(true);
     expect(migration.created).toBe(false);
     expect(migration.settings.blockedDomains[0]?.domain).toBe("instagram.com");
+    expect(migration.settings.blockedDomains[0]?.windowScope).toBe("regular");
     expect(migration.settings.blockedDomains[0]?.schedule).toEqual({ mode: "always" });
     expect(migration.settings.timeLimitedDomains[0]).toMatchObject({
       domain: "youtube.com",
+      targetType: "domain",
+      windowScope: "regular",
       schedule: { mode: "always" }
     });
+    expect(migration.settings.privateBrowserTrackingEnabled).toBe(false);
     expect(migration.settings.ignoredDomains).toEqual(["reddit.com"]);
     expect(persisted[SETTINGS_STORAGE_KEY]).toMatchObject({
       updatedAt: 20
     });
+  });
+
+  it("persists the private browser tracking setting", async () => {
+    const storage = new MemoryStorageArea() as unknown as browser.storage.StorageArea;
+    const settingsStore = new SettingsStore(storage);
+
+    await settingsStore.get(10);
+    const updated = await settingsStore.update({ privateBrowserTrackingEnabled: true }, 20);
+    const reloaded = await settingsStore.get(30);
+
+    expect(updated.privateBrowserTrackingEnabled).toBe(true);
+    expect(reloaded.privateBrowserTrackingEnabled).toBe(true);
   });
 
   it("does not contain runtime code that clears extension persistence", async () => {
@@ -148,6 +164,10 @@ describe("extension lifecycle and migrations", () => {
     await sessionRepository.add(session);
     await runMigrations();
 
-    expect(await sessionRepository.getByDateKey("1970-01-01")).toContainEqual(session);
+    expect(await sessionRepository.getByDateKey("1970-01-01")).toContainEqual({
+      ...session,
+      windowScope: "regular",
+      usageMode: "active"
+    });
   });
 });

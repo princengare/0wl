@@ -6,7 +6,13 @@ import type {
 } from "@/vision/types";
 
 export type StartReason =
-  "startup" | "tab-activated" | "navigation" | "window-focused" | "idle-resumed";
+  | "startup"
+  | "tab-activated"
+  | "navigation"
+  | "window-focused"
+  | "idle-resumed"
+  | "media-started"
+  | "media-resumed";
 
 export type EndReason =
   | "tab-switched"
@@ -15,11 +21,16 @@ export type EndReason =
   | "idle"
   | "tab-closed"
   | "browser-recovery"
-  | "tracking-disabled";
+  | "tracking-disabled"
+  | "media-stopped"
+  | "media-mode-changed"
+  | "media-stale";
 
 export interface UsageSession {
   id: string;
   domain: string;
+  windowScope?: WindowScope;
+  usageMode?: UsageMode;
   startedAt: number;
   endedAt: number;
   durationMs: number;
@@ -33,6 +44,7 @@ export interface DailyUsage {
   id: string;
   dateKey: string;
   domain: string;
+  windowScope?: WindowScope;
   durationMs: number;
   sessionCount: number;
   lastUpdatedAt: number;
@@ -41,10 +53,19 @@ export interface DailyUsage {
 export interface BlockAttempt {
   id: string;
   domain: string;
+  windowScope?: WindowScope;
   attemptedAt: number;
   dateKey: string;
   source: "navigation";
   count: number;
+}
+
+export type WindowScope = "regular" | "private";
+export type UsageMode = "active" | "pip" | "background";
+
+export interface HistoryModeSelection {
+  private: boolean;
+  mediaMode: UsageMode;
 }
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -65,14 +86,19 @@ export type ScheduleConfig = AlwaysSchedule | CustomSchedule;
 export interface BlockedDomain {
   id: string;
   domain: string;
+  windowScope?: WindowScope;
   enabled: boolean;
   schedule: ScheduleConfig;
   createdAt: number;
 }
 
+export type TimeLimitTargetType = "domain" | "global";
+
 export interface TimeLimitedDomain {
   id: string;
-  domain: string;
+  domain: string | null;
+  targetType: TimeLimitTargetType;
+  windowScope: WindowScope;
   enabled: boolean;
   limitMinutes: number;
   schedule: ScheduleConfig;
@@ -85,6 +111,7 @@ export type HistoryRetentionDays = 30 | 90 | 180 | 365 | null;
 export interface ExtensionSettings {
   schemaVersion: 1;
   trackingEnabled: boolean;
+  privateBrowserTrackingEnabled: boolean;
   idleThresholdSeconds: number;
   blockedDomains: BlockedDomain[];
   timeLimitedDomains: TimeLimitedDomain[];
@@ -103,8 +130,44 @@ export interface PersistedTrackingState {
   activeTabId: number | null;
   activeWindowId: number | null;
   domain: string | null;
+  windowScope?: WindowScope | null;
   sessionStartedAt: number | null;
   lastTransitionAt: number;
+  revision: number;
+}
+
+export type MediaUsageMode = Exclude<UsageMode, "active">;
+
+export interface PersistedMediaTabReport {
+  tabId: number;
+  windowId: number | null;
+  url: string;
+  domain: string;
+  windowScope: WindowScope;
+  playing: boolean;
+  playingAudio: boolean;
+  playingVideo: boolean;
+  pictureInPicture: boolean;
+  pictureInPictureSupported: boolean;
+  reportedAt: number;
+}
+
+export interface PersistedMediaSessionState {
+  key: string;
+  tabId: number;
+  windowId: number | null;
+  domain: string;
+  windowScope: WindowScope;
+  usageMode: MediaUsageMode;
+  startedAt: number;
+  lastObservedAt: number;
+}
+
+export interface PersistedMediaTrackingState {
+  schemaVersion: 1;
+  reports: PersistedMediaTabReport[];
+  sessions: PersistedMediaSessionState[];
+  updatedAt: number;
   revision: number;
 }
 
@@ -149,6 +212,7 @@ export interface ActiveBrowserContext {
   activeWindowId: number | null;
   url: string | null;
   domain: string | null;
+  windowScope?: WindowScope;
   trackable: boolean;
 }
 
@@ -171,6 +235,9 @@ export type HistoryRange = "today" | "yesterday" | "last-7-days";
 export interface HistorySessionView {
   id: string;
   domain: string;
+  windowScope: WindowScope;
+  usageMode?: UsageMode;
+  aggregateOnly?: boolean;
   startedAt: number;
   endedAt: number;
   durationMs: number;
@@ -178,7 +245,10 @@ export interface HistorySessionView {
 }
 
 export interface TimeLimitStatus {
-  domain: string;
+  domain: string | null;
+  targetType: TimeLimitTargetType;
+  windowScope: WindowScope;
+  label: string;
   limitMinutes: number;
   usedMs: number;
   remainingMs: number;
@@ -233,8 +303,14 @@ export interface DataExportResult {
 
 export type MessageRequest =
   | { type: "GET_TODAY_SUMMARY" }
-  | { type: "GET_HISTORY"; range: HistoryRange }
-  | { type: "GET_HISTORY_INTERVAL"; startedAt: number; endedAt: number }
+  | { type: "GET_HISTORY"; range: HistoryRange; windowScope?: WindowScope; usageMode?: UsageMode }
+  | {
+      type: "GET_HISTORY_INTERVAL";
+      startedAt: number;
+      endedAt: number;
+      windowScope?: WindowScope;
+      usageMode?: UsageMode;
+    }
   | { type: "GET_SETTINGS" }
   | {
       type: "UPDATE_SETTINGS";
@@ -242,22 +318,35 @@ export type MessageRequest =
         Pick<
           ExtensionSettings,
           | "trackingEnabled"
+          | "privateBrowserTrackingEnabled"
           | "idleThresholdSeconds"
           | "showBlockedAttemptCount"
           | "historyRetentionDays"
         >
       >;
     }
-  | { type: "ADD_BLOCKED_DOMAIN"; input: string; schedule?: ScheduleConfig }
+  | {
+      type: "ADD_BLOCKED_DOMAIN";
+      input: string;
+      schedule?: ScheduleConfig;
+      windowScope?: WindowScope;
+    }
   | { type: "REMOVE_BLOCKED_DOMAIN"; id: string }
   | { type: "SET_BLOCKED_DOMAIN_ENABLED"; id: string; enabled: boolean }
-  | { type: "UPDATE_BLOCKED_DOMAIN"; id: string; input: string; schedule: ScheduleConfig }
+  | {
+      type: "UPDATE_BLOCKED_DOMAIN";
+      id: string;
+      input: string;
+      schedule: ScheduleConfig;
+      windowScope?: WindowScope;
+    }
   | { type: "UPDATE_BLOCKED_DOMAIN_SCHEDULE"; id: string; schedule: ScheduleConfig }
   | {
       type: "ADD_TIME_LIMITED_DOMAIN";
       input: string;
       limitMinutes: number;
       schedule?: ScheduleConfig;
+      windowScope?: WindowScope;
     }
   | { type: "REMOVE_TIME_LIMITED_DOMAIN"; id: string }
   | { type: "SET_TIME_LIMITED_DOMAIN_ENABLED"; id: string; enabled: boolean }
@@ -267,9 +356,20 @@ export type MessageRequest =
       input?: string;
       limitMinutes: number;
       schedule?: ScheduleConfig;
+      windowScope?: WindowScope;
     }
-  | { type: "GET_TIME_LIMIT_STATUS"; domain: string }
-  | { type: "BYPASS_TIME_LIMIT"; domain: string }
+  | {
+      type: "GET_TIME_LIMIT_STATUS";
+      domain?: string;
+      targetType?: TimeLimitTargetType;
+      windowScope?: WindowScope;
+    }
+  | {
+      type: "BYPASS_TIME_LIMIT";
+      domain?: string;
+      targetType?: TimeLimitTargetType;
+      windowScope?: WindowScope;
+    }
   | { type: "GET_VISION_REPORT" }
   | {
       type: "SET_DOMAIN_CLASSIFICATION";
@@ -301,8 +401,19 @@ export type MessageRequest =
   | { type: "IMPORT_DATA_BACKUP"; backup: DataBackup; mode: DataImportMode }
   | { type: "SET_HISTORY_RETENTION"; historyRetentionDays: HistoryRetentionDays }
   | { type: "DELETE_LOCAL_DATA"; target: DataDeleteTarget }
+  | { type: "CLEAR_PRIVATE_BROWSING_DATA" }
   | { type: "RESET_ALL_LOCAL_DATA"; confirmation: string }
-  | { type: "GET_BLOCKED_ATTEMPT_COUNT"; domain: string }
-  | { type: "RECORD_BLOCK_ATTEMPT"; domain: string };
+  | { type: "GET_BLOCKED_ATTEMPT_COUNT"; domain: string; windowScope?: WindowScope }
+  | { type: "RECORD_BLOCK_ATTEMPT"; domain: string; windowScope?: WindowScope }
+  | {
+      type: "REPORT_MEDIA_STATE";
+      url: string;
+      playing: boolean;
+      playingAudio?: boolean;
+      playingVideo?: boolean;
+      pictureInPicture: boolean;
+      pictureInPictureSupported?: boolean;
+      reportedAt?: number;
+    };
 
 export type MessageResponse<T> = { ok: true; data: T } | { ok: false; error: string };

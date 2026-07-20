@@ -32,6 +32,10 @@ export function deriveDesiredStatus(
     return "browser-unfocused";
   }
 
+  if (context.windowScope === "private" && !settings.privateBrowserTrackingEnabled) {
+    return "inactive";
+  }
+
   if (!context.trackable || !context.domain) {
     return "inactive";
   }
@@ -98,13 +102,15 @@ export function makeInactiveState(
   now: number,
   activeTabId: number | null,
   activeWindowId: number | null,
-  domain: string | null
+  domain: string | null,
+  windowScope: PersistedTrackingState["windowScope"] = null
 ): PersistedTrackingState {
   return {
     status,
     activeTabId,
     activeWindowId,
     domain,
+    windowScope,
     sessionStartedAt: null,
     lastTransitionAt: now,
     revision: previous.revision + 1
@@ -117,6 +123,7 @@ export function makeTrackingState(
   activeTabId: number | null,
   activeWindowId: number | null,
   domain: string,
+  windowScope: PersistedTrackingState["windowScope"],
   sessionStartedAt = now
 ): PersistedTrackingState {
   return {
@@ -124,6 +131,7 @@ export function makeTrackingState(
     activeTabId,
     activeWindowId,
     domain,
+    windowScope,
     sessionStartedAt,
     lastTransitionAt: now,
     revision: previous.revision + 1

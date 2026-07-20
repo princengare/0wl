@@ -1,5 +1,6 @@
 import { MIN_VALID_SESSION_DURATION_MS } from "@/shared/constants";
 import { getDateKey } from "@/shared/time";
+import { normalizeWindowScope } from "@/platform/windowScope";
 import type { EndReason, PersistedTrackingState, StartReason, UsageSession } from "@/shared/types";
 import type { DailyUsageRepository } from "@/db/repositories/DailyUsageRepository";
 import type { SessionRepository } from "@/db/repositories/SessionRepository";
@@ -39,6 +40,8 @@ export class SessionManager {
     const session: UsageSession = {
       id: createSessionId(state.domain, state.sessionStartedAt, endedAt),
       domain: state.domain,
+      windowScope: normalizeWindowScope(state.windowScope),
+      usageMode: "active",
       startedAt: state.sessionStartedAt,
       endedAt,
       durationMs,
