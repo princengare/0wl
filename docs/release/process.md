@@ -8,13 +8,14 @@
 0.1.3  Vision insights, WXT cross-browser builds, and UI consistency with the 0wl aesthetic
 0.1.4  Settings data control, local backups, 0wl footers, and concise Vision summaries
 0.1.5  Privacy links, app surface tracking exclusion, and PiP/background media separation
+0.1.6  Popup-only privacy link placement, terminal privacy-link styling, and source release metadata
 0.3.0  Expanded behavioral intelligence
 1.0.0  Stable public release
 ```
 
 Release status:
 
-- Source target: `0.1.5`
+- Source target: `0.1.6`
 - Approved version: `0.1.5`
 - Status: 0.1.5 approved and listed on Mozilla Add-ons.
 - Listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/

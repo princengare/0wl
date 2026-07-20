@@ -8,7 +8,7 @@ Project site: https://princengare.github.io/0wl/
 
 Firefox Add-ons listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
 
-Current codebase release: `0.1.5`
+Current codebase release: `0.1.6`
 
 Current Mozilla-approved listing: `0.1.5`
 
@@ -407,10 +407,11 @@ Version `0.1.4` improves Vision summaries:
 - Drift is shown as compressed context-to-distraction movement.
 - Evasion is tied to actual block or intervention events rather than ordinary browsing alone.
 
-Version `0.1.5` adds privacy and media-bucket refinements:
+Version `0.1.6` adds privacy and media-bucket refinements:
 
-- Private browsing tracking now links directly to the 0wl privacy policy for what is tracked.
+- Private browsing tracking links directly to the 0wl privacy policy for what is tracked inside the enable-confirmation popup.
 - Data Control includes a Privacy Policy link under local Site Categories.
+- Privacy-policy links now keep the terminal-style black-and-white interaction instead of browser-default link colors, and the Data Control Privacy Policy button is left aligned.
 - The public 0wl documentation/privacy site is excluded from active browsing and media tracking because it is part of using the app.
 - Picture-in-Picture and background media tracking are kept separate when PiP is detectable; ordinary non-active video records as background media, and live media sessions appear in History before playback stops.
 
@@ -452,7 +453,7 @@ Blocked attempts are recorded locally. Repeated attempts are bucketed by normali
 Use `Settings` to control:
 
 - `Tracking enabled`: turns tracking on or off.
-- `Private browsing tracking enabled`: allows 0wl to track and enforce rules in private/incognito windows when the browser permits it. The row links to the privacy policy for what is tracked.
+- `Private browsing tracking enabled`: allows 0wl to track and enforce rules in private/incognito windows when the browser permits it. The enable-confirmation popup links to the privacy policy for what is tracked.
 - `Idle threshold`: controls how long the system must be inactive before tracking stops.
 - `Show blocked attempt counts`: controls whether the blocked page shows today’s attempt count.
 - `History retention`: controls how long local history is retained, with `Forever` as the default.
@@ -1272,6 +1273,7 @@ Example release progression:
 0.1.3  Vision insights, WXT cross-browser builds, and UI consistency with the 0wl aesthetic
 0.1.4  Mozilla-approved Settings data control, local backups, 0wl footers, and concise Vision summaries
 0.1.5  Mozilla-approved privacy links, 0wl site tracking exclusion, and separated PiP/background media refinements
+0.1.6  Source release target for popup-only privacy link placement, terminal privacy-link styling, and media-bucket refinements
 0.3.0  Expanded behavioral intelligence
 1.0.0  Stable public release
 ```

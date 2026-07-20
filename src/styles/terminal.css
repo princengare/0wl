@@ -296,20 +296,45 @@ select option {
   content: " ]";
 }
 
+.terminal-button,
+.terminal-button:visited {
+  color: #f7f7f7;
+  text-decoration: none;
+}
+
+.terminal-link,
+.terminal-link:visited {
+  display: inline-block;
+  color: #f7f7f7;
+  text-decoration: none;
+}
+
 .terminal-button.active,
-.terminal-button:hover,
-.terminal-link:hover {
+.terminal-button:hover {
   text-decoration: underline;
+}
+
+.terminal-link:hover,
+.terminal-link:focus-visible,
+.terminal-link:active {
+  color: #000000;
+  background: #f7f7f7;
+  outline: none;
+  text-decoration: none;
 }
 
 .terminal-action-invert:not(:disabled):hover,
 .terminal-action-invert:not(:disabled):focus-visible,
+.terminal-action-invert:not(:disabled):active,
 .terminal-data-control .terminal-button:not(:disabled):hover,
 .terminal-data-control .terminal-button:not(:disabled):focus-visible,
+.terminal-data-control .terminal-button:not(:disabled):active,
 .terminal-modal .terminal-button:not(:disabled):hover,
 .terminal-modal .terminal-button:not(:disabled):focus-visible,
+.terminal-modal .terminal-button:not(:disabled):active,
 .terminal-week-button:not(:disabled):hover,
-.terminal-week-button:not(:disabled):focus-visible {
+.terminal-week-button:not(:disabled):focus-visible,
+.terminal-week-button:not(:disabled):active {
   color: #000000;
   background: #f7f7f7;
   outline: none;
@@ -1054,6 +1079,15 @@ label.terminal-list-row:has(.terminal-checkbox):focus-within .terminal-checkbox-
 }
 
 .terminal-modal .terminal-title {
+  margin: 0;
+}
+
+.terminal-modal-message {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.terminal-modal-message p {
   margin: 0;
 }
 

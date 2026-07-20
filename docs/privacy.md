@@ -58,7 +58,7 @@ Private/incognito tracking is off by default.
 
 If you enable private/incognito tracking in 0wl and your browser separately allows 0wl to run in private/incognito windows, 0wl can track and enforce rules in that private/incognito context. Private/incognito rules and usage are stored separately where the app supports separate scopes.
 
-0wl links to this policy from the private browsing tracking setting so you can review what is tracked before enabling private/incognito tracking.
+0wl links to this policy from the private browsing tracking enable popup so you can review what is tracked before enabling private/incognito tracking.
 
 Browser vendors control whether extensions may run in private/incognito windows. 0wl cannot force that access by itself.
 

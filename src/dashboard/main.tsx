@@ -2162,7 +2162,7 @@ function VisionPage(): React.JSX.Element {
 
 interface ConfirmationState {
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmLabel: string;
   confirmationText?: string;
   inputLabel?: string;
@@ -2230,7 +2230,7 @@ function ConfirmationDialog({
             [x]
           </button>
         </div>
-        <p>{state.message}</p>
+        <div className="terminal-modal-message">{state.message}</div>
         {requiredText ? (
           <input
             aria-label={state.inputLabel ?? "Confirmation text"}
@@ -2515,10 +2515,12 @@ function DataControlSection({
               </span>
             </div>
             <div className="terminal-list-row">
+              <span>
+                <a className="terminal-button terminal-action-invert" href={APP_PRIVACY_POLICY_URL}>
+                  Privacy Policy
+                </a>
+              </span>
               <span></span>
-              <a className="terminal-button terminal-action-invert" href={APP_PRIVACY_POLICY_URL}>
-                Privacy Policy
-              </a>
             </div>
           </div>
         </section>
@@ -2710,10 +2712,22 @@ function SettingsPage({
 
     setConfirmation({
       title: "Enable private browsing tracking?",
-      message:
-        accessStatus === "allowed"
-          ? "Your browser reports that 0wl can access private/incognito windows. Enable private browsing tracking and enforcement?"
-          : "0wl could not verify private/incognito access in this browser. Enable the 0wl setting only if you have also allowed private/incognito access in the browser extension settings.",
+      message: (
+        <>
+          <p>
+            {accessStatus === "allowed"
+              ? "Your browser reports that 0wl can access private/incognito windows. Enable private browsing tracking and enforcement?"
+              : "0wl could not verify private/incognito access in this browser. Enable the 0wl setting only if you have also allowed private/incognito access in the browser extension settings."}
+          </p>
+          <p>
+            see our [[
+            <a className="terminal-link" href={APP_PRIVACY_POLICY_URL}>
+              privacy policy
+            </a>
+            ]] for what's tracked
+          </p>
+        </>
+      ),
       confirmLabel: "Enable",
       run: async () => {
         await updateSettings({ privateBrowserTrackingEnabled: true });
@@ -2815,16 +2829,6 @@ function SettingsPage({
             }
           />
         </label>
-        <div className="terminal-list-row">
-          <span>
-            see our [
-            <a className="terminal-link" href={APP_PRIVACY_POLICY_URL}>
-              privacy policy
-            </a>
-            ] for what's tracked
-          </span>
-          <span></span>
-        </div>
 
         <div className="terminal-list-row">
           <span>Idle threshold</span>
