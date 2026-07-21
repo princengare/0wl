@@ -1,4 +1,5 @@
 import type { BlockAttempt, UsageSession } from "@/shared/types";
+import { formatDuration } from "@/shared/time";
 import {
   classificationCategory,
   sortSessionsAscending,
@@ -7,6 +8,30 @@ import {
 import { isDistractionCategory } from "../classification/categoryTypes";
 import type { DomainClassification, PathwaySummary } from "../types";
 
+interface AttemptChainOccurrence {
+  attemptedDomain: string;
+  sessions: UsageSession[];
+  count: number;
+}
+
+function weightedAverageDiversion(occurrences: AttemptChainOccurrence[]): number {
+  const totalCount = occurrences.reduce((sum, occurrence) => sum + occurrence.count, 0);
+
+  if (totalCount === 0) {
+    return 0;
+  }
+
+  return (
+    occurrences.reduce(
+      (sum, occurrence) =>
+        sum +
+        occurrence.count *
+          occurrence.sessions.reduce((inner, session) => inner + session.durationMs, 0),
+      0
+    ) / totalCount
+  );
+}
+
 export class AttemptChainDetector {
   detect(
     attempts: BlockAttempt[],
@@ -14,7 +39,7 @@ export class AttemptChainDetector {
     classifications: Map<string, DomainClassification | null>
   ): PathwaySummary[] {
     const orderedSessions = sortSessionsAscending(sessions);
-    const chains = new Map<string, UsageSession[][]>();
+    const chains = new Map<string, AttemptChainOccurrence[]>();
 
     for (const attempt of attempts) {
       const afterAttempt = orderedSessions.filter(
@@ -32,22 +57,47 @@ export class AttemptChainDetector {
 
       const domains = [attempt.domain, ...distractionSessions.map((session) => session.domain)];
       const key = domains.join("->");
-      chains.set(key, [...(chains.get(key) ?? []), distractionSessions]);
+      chains.set(key, [
+        ...(chains.get(key) ?? []),
+        {
+          attemptedDomain: attempt.domain,
+          sessions: distractionSessions,
+          count: attempt.count
+        }
+      ]);
     }
 
     return [...chains.entries()]
-      .map(([id, groups]) => ({
-        id,
-        domains: id.split("->"),
-        categories: [],
-        count: groups.length,
-        averageDiversionMs:
-          groups.reduce(
-            (sum, group) => sum + group.reduce((inner, s) => inner + s.durationMs, 0),
-            0
-          ) / groups.length,
-        commonEntry: id.split("->")[1] ?? null
-      }))
+      .map(([id, occurrences]) => {
+        const domains = id.split("->");
+        const attemptedDomain = domains[0];
+        const substitutes = domains.slice(1);
+        const count = occurrences.reduce((sum, occurrence) => sum + occurrence.count, 0);
+        const averageDiversionMs = weightedAverageDiversion(occurrences);
+
+        return {
+          id,
+          domains,
+          categories: domains.map(
+            (domain) => classificationCategory(classifications, domain) ?? "neutral"
+          ),
+          count,
+          averageDiversionMs,
+          commonEntry: substitutes[0] ?? null,
+          displayLabel: `${attemptedDomain} blocked -> ${substitutes.join(" -> ")}`,
+          displaySegments: [`${attemptedDomain} blocked`, ...substitutes],
+          rawDomains: domains,
+          firstDistractionDomain: substitutes[0] ?? null,
+          confidence: count >= 3 ? "high" : "medium",
+          details: [
+            { label: "repeat count", value: `${count}x` },
+            { label: "blocked site", value: attemptedDomain },
+            { label: "substitutes", value: substitutes.join(", ") },
+            { label: "average diversion", value: formatDuration(averageDiversionMs) },
+            { label: "raw domains", value: domains.join(" -> ") }
+          ]
+        } satisfies PathwaySummary;
+      })
       .sort((a, b) => b.count - a.count)
       .slice(0, 6);
   }

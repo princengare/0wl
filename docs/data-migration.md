@@ -9,7 +9,7 @@ Database constants live in `src/shared/constants.ts`.
 Current database:
 
 - name: `focus_tracker`
-- version: `2`
+- version: `3`
 
 Stores:
 
@@ -20,6 +20,8 @@ Stores:
 - `browsing_intents`
 
 Schema creation is centralized in `src/db/database.ts`, and startup opens the database through `src/db/migrations.ts`.
+
+Version `3` preserves all stores and records while changing the `daily_usage` date/domain index to non-unique so regular and private aggregate rows can coexist safely for the same domain and day.
 
 Future IndexedDB changes should:
 
@@ -77,6 +79,8 @@ Data Control can:
 - clear selected local data categories after typed confirmation
 - reset settings or all local data only after confirmation
 
+Version `0.1.7` keeps automatic usage-data repair active on startup and before History reads. 0wl can remove only impossible active sessions that are 24 hours or longer or mathematically inconsistent, reset stale live runtime state without awarding phantom time, and rebuild the derived `daily_usage` aggregate from remaining valid sessions. New session writes also refuse to persist 24-hour-plus active sessions. Settings, blocked sites, time limits, Vision data, and valid sessions are preserved.
+
 These actions operate on local extension storage in the current browser. They do not add cloud sync, accounts, telemetry, or remote backup.
 
 ## Update Safety Rules
@@ -85,6 +89,8 @@ On update or reload:
 
 - do not count unknown downtime
 - invalidate stale active runtime sessions
+- treat legacy tracking runtime state without a saved window scope as regular
+- repair impossible active-session rows and suspicious daily aggregates without clearing valid local data
 - re-read current browser state
 - rebuild dynamic blocking, time-limit, and friction rules
 - reschedule block, time-limit, and friction alarms from saved settings

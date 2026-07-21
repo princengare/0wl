@@ -152,6 +152,7 @@ export interface HeatmapCell {
   dayOfWeek: number;
   hour: number;
   count: number;
+  domains: Array<{ domain: string; count: number }>;
 }
 
 export interface BlockOutcomeSummary {

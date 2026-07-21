@@ -44,6 +44,17 @@ function isRuntimeSessionMeta(value: unknown): value is RuntimeSessionMeta {
   );
 }
 
+function normalizeRuntimeWindowScope(
+  value: PersistedTrackingState["windowScope"],
+  status: PersistedTrackingState["status"]
+): PersistedTrackingState["windowScope"] {
+  if (value === "regular" || value === "private") {
+    return normalizeWindowScope(value);
+  }
+
+  return status === "tracking" ? "regular" : null;
+}
+
 export class RuntimeStateStore {
   constructor(private readonly storageArea: StorageArea = extensionBrowser.storage.local) {}
 
@@ -54,7 +65,10 @@ export class RuntimeStateStore {
     >;
     const value = result[RUNTIME_STATE_STORAGE_KEY];
     return isPersistedTrackingState(value)
-      ? { ...value, windowScope: value.windowScope ? normalizeWindowScope(value.windowScope) : null }
+      ? {
+          ...value,
+          windowScope: normalizeRuntimeWindowScope(value.windowScope, value.status)
+        }
       : createDefaultRuntimeState(now);
   }
 

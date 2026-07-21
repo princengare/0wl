@@ -4,6 +4,7 @@ import { SessionManager } from "@/background/tracking/SessionManager";
 import { TrackingEngine } from "@/background/tracking/TrackingEngine";
 import { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import { SettingsStore } from "@/storage/SettingsStore";
+import { MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS } from "@/shared/constants";
 import type { ActiveBrowserContext, UsageSession } from "@/shared/types";
 import { MemoryStorageArea } from "./helpers/memoryStorage";
 
@@ -256,6 +257,45 @@ describe("tracking state machine", () => {
     const state = await harness.runtimeStateStore.get();
     expect(state.status).toBe("tracking");
     expect(state.sessionStartedAt).toBe(100_000);
+  });
+
+  it("does not persist a stale 24-hour active session when a transition closes it", async () => {
+    const harness = createHarness();
+    await harness.runtimeStateStore.set({
+      status: "tracking",
+      activeTabId: 1,
+      activeWindowId: 1,
+      domain: "youtube.com",
+      windowScope: "private",
+      sessionStartedAt: 1_000,
+      lastTransitionAt: 1_000,
+      revision: 1
+    });
+    await harness.runtimeStateStore.setSessionStartReason("startup");
+    await harness.settingsStore.update({ privateBrowserTrackingEnabled: true }, 1);
+
+    harness.setNow(1_000 + MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS + 1);
+    harness.setContext(makeContext(null, { windowScope: "private" }));
+    await harness.engine.reconcileTrackingState("navigation");
+
+    expect(harness.sessions).toHaveLength(0);
+    expect((await harness.runtimeStateStore.get()).status).toBe("inactive");
+  });
+
+  it("can stop tracking for a redirected active tab without waiting for navigation events", async () => {
+    const harness = createHarness();
+    await harness.engine.reconcileTrackingState("startup");
+
+    harness.setNow(5_000);
+    await harness.engine.stopTrackingForTab(1, "navigation");
+
+    expect(harness.sessions).toHaveLength(1);
+    expect(harness.sessions[0]).toMatchObject({
+      domain: "youtube.com",
+      endedAt: 5_000,
+      endReason: "navigation"
+    });
+    expect((await harness.runtimeStateStore.get()).status).toBe("inactive");
   });
 
   it("does not count stale install or update downtime", async () => {

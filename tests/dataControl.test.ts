@@ -11,6 +11,7 @@ import type { UsageSession } from "@/shared/types";
 
 const TEST_DATE_KEY = "2026-07-20";
 const TEST_NOW = new Date(2026, 6, 20, 12, 0, 0).getTime();
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function makeSession(
   id: string,
@@ -105,5 +106,111 @@ describe("private browsing data control", () => {
     expect(await blockAttemptRepository.countForDate("instagram.com", TEST_DATE_KEY, "private")).toBe(
       0
     );
+  });
+
+  it("repairs impossible usage rows without clearing valid local data", async () => {
+    const storage = new MemoryStorageArea() as unknown as browser.storage.StorageArea;
+    const settingsStore = new SettingsStore(storage);
+    const runtimeStateStore = new RuntimeStateStore(storage);
+    const visionSettingsStore = new VisionSettingsStore(storage);
+    const sessionRepository = new SessionRepository();
+    const dailyUsageRepository = new DailyUsageRepository();
+    const repairDateKey = "2026-07-21";
+    const repairNow = new Date(2026, 6, 21, 12, 0, 0).getTime();
+    const validStartedAt = new Date(2026, 6, 21, 10, 0).getTime();
+    const validEndedAt = validStartedAt + 30 * 60 * 1000;
+    const corruptStartedAt = repairNow - 3 * DAY_MS;
+    const service = new DataControlService({
+      settingsStore,
+      runtimeStateStore,
+      visionSettingsStore,
+      blockRuleManager: {
+        refreshDynamicRules: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["blockRuleManager"],
+      timeLimitManager: {
+        refresh: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["timeLimitManager"],
+      frictionRuleManager: {
+        refreshDynamicRules: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["frictionRuleManager"],
+      trackingEngine: {
+        reconcileTrackingState: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["trackingEngine"],
+      seedSiteCategoryCount: 0,
+      storageArea: storage,
+      now: () => repairNow
+    });
+
+    await sessionRepository.add({
+      id: "valid-session",
+      domain: "github.com",
+      windowScope: "regular",
+      usageMode: "active",
+      startedAt: validStartedAt,
+      endedAt: validEndedAt,
+      durationMs: validEndedAt - validStartedAt,
+      startReason: "startup",
+      endReason: "navigation",
+      dateKey: repairDateKey,
+      createdAt: validEndedAt
+    });
+    await sessionRepository.add({
+      id: "corrupt-session",
+      domain: "youtube.com",
+      windowScope: "private",
+      usageMode: "active",
+      startedAt: corruptStartedAt,
+      endedAt: repairNow,
+      durationMs: repairNow - corruptStartedAt,
+      startReason: "startup",
+      endReason: "navigation",
+      dateKey: repairDateKey,
+      createdAt: repairNow
+    });
+    await dailyUsageRepository.addDuration(
+      repairDateKey,
+      "youtube.com",
+      3 * DAY_MS,
+      1,
+      repairNow,
+      "private"
+    );
+    await settingsStore.addBlockedDomain("instagram.com", 1, { mode: "always" }, "regular");
+    await settingsStore.addTimeLimitedDomain("reddit.com", 30, 2, { mode: "always" }, "regular");
+    await runtimeStateStore.set({
+      status: "tracking",
+      activeTabId: 7,
+      activeWindowId: 1,
+      domain: "youtube.com",
+      windowScope: "private",
+      sessionStartedAt: corruptStartedAt,
+      lastTransitionAt: corruptStartedAt,
+      revision: 1
+    });
+
+    const result = await service.repairUsageData();
+
+    expect(result).toEqual({
+      removedSessions: 1,
+      rebuiltDailyUsageRecords: expect.any(Number),
+      resetStaleRuntimeState: true
+    });
+    expect(result.rebuiltDailyUsageRecords).toBeGreaterThanOrEqual(1);
+    const sessions = await sessionRepository.listAll();
+    expect(sessions.some((session) => session.id === "valid-session")).toBe(true);
+    expect(sessions.some((session) => session.id === "corrupt-session")).toBe(false);
+    expect(await dailyUsageRepository.listByDate(repairDateKey, "regular")).toContainEqual(
+      expect.objectContaining({
+        domain: "github.com",
+        durationMs: 30 * 60 * 1000
+      })
+    );
+    expect(await dailyUsageRepository.listByDate(repairDateKey, "private")).not.toContainEqual(
+      expect.objectContaining({ domain: "youtube.com" })
+    );
+    expect((await runtimeStateStore.get(repairNow)).status).toBe("inactive");
+    const settings = await settingsStore.get(repairNow);
+    expect(settings.blockedDomains).toHaveLength(1);
+    expect(settings.timeLimitedDomains).toHaveLength(1);
   });
 });

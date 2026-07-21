@@ -10,6 +10,7 @@ import {
 } from "./TrackingState";
 import type { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import type { SettingsStore } from "@/storage/SettingsStore";
+import { normalizeWindowScope } from "@/platform/windowScope";
 import type {
   ActiveBrowserContext,
   PersistedTrackingState,
@@ -48,6 +49,12 @@ export class TrackingEngine {
 
   async reconcileTrackingState(reason: ReconcileReason): Promise<void> {
     const run = this.queue.then(() => this.reconcileInternal(reason));
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  async stopTrackingForTab(tabId: number, reason: ReconcileReason = "navigation"): Promise<void> {
+    const run = this.queue.then(() => this.stopTrackingForTabInternal(tabId, reason));
     this.queue = run.catch(() => undefined);
     return run;
   }
@@ -104,6 +111,28 @@ export class TrackingEngine {
     await this.dependencies.runtimeStateStore.setSessionStartReason(null);
   }
 
+  private async stopTrackingForTabInternal(tabId: number, reason: ReconcileReason): Promise<void> {
+    const now = this.now();
+    const previous = await this.dependencies.runtimeStateStore.get(now);
+
+    if (previous.status !== "tracking" || previous.activeTabId !== tabId) {
+      return;
+    }
+
+    await this.closePreviousSession(previous, now, reason, "inactive");
+    await this.dependencies.runtimeStateStore.set(
+      makeInactiveState(
+        previous,
+        "inactive",
+        now,
+        previous.activeTabId,
+        previous.activeWindowId,
+        null,
+        previous.windowScope
+      )
+    );
+  }
+
   private async reconcileInternal(reason: ReconcileReason): Promise<void> {
     const now = this.now();
     const previous = await this.dependencies.runtimeStateStore.get(now);
@@ -112,7 +141,7 @@ export class TrackingEngine {
     const activeTabId = context?.activeTabId ?? null;
     const activeWindowId = context?.activeWindowId ?? null;
     const domain = context?.domain ?? null;
-    const windowScope = context?.windowScope ?? null;
+    const windowScope = context ? normalizeWindowScope(context.windowScope) : null;
 
     if (
       previous.status === "tracking" &&

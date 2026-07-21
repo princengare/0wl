@@ -2,9 +2,14 @@ import type { TimeLimitRuleManager } from "./TimeLimitRuleManager";
 import { buildTimeLimitPageUrl } from "./TimeLimitRuleBuilder";
 import type { DailyUsageRepository } from "@/db/repositories/DailyUsageRepository";
 import type { SessionRepository } from "@/db/repositories/SessionRepository";
+import type { TrackingEngine } from "@/background/tracking/TrackingEngine";
 import type { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import type { SettingsStore } from "@/storage/SettingsStore";
-import { TIME_LIMIT_ALARM_NAME, TIME_LIMIT_BYPASS_DURATION_MS } from "@/shared/constants";
+import {
+  MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS,
+  TIME_LIMIT_ALARM_NAME,
+  TIME_LIMIT_BYPASS_DURATION_MS
+} from "@/shared/constants";
 import { browser } from "@/shared/browser";
 import { clearAlarm, createAlarm } from "@/platform/alarmsApi";
 import { normalizeDomain, normalizeDomainFromUrl } from "@/shared/domain";
@@ -42,6 +47,7 @@ interface TimeLimitManagerDependencies {
   dailyUsageRepository: DailyUsageRepository;
   sessionRepository: SessionRepository;
   timeLimitRuleManager: TimeLimitRuleManager;
+  trackingEngine?: Pick<TrackingEngine, "stopTrackingForTab">;
   now?: () => number;
 }
 
@@ -81,6 +87,14 @@ function resolveStatusTarget(
 
 function matchesLimitTarget(limited: TimeLimitedDomain, domain: string): boolean {
   return limited.targetType === "global" || limited.domain === domain;
+}
+
+function isReasonableLiveSession(sessionStartedAt: number | null, now: number): boolean {
+  return (
+    sessionStartedAt !== null &&
+    sessionStartedAt < now &&
+    now - sessionStartedAt < MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS
+  );
 }
 
 type QueryableTabsApi = typeof browser.tabs & {
@@ -186,19 +200,20 @@ export class TimeLimitManager {
         ? rows.reduce((sum, row) => sum + row.durationMs, 0)
         : (rows.find((row) => row.domain === limited.domain)?.durationMs ?? 0);
     const runtimeState = await this.dependencies.runtimeStateStore.get(now);
+    const liveSessionStartedAt = runtimeState.sessionStartedAt;
 
     if (
       runtimeState.status !== "tracking" ||
       normalizeWindowScope(runtimeState.windowScope) !== limited.windowScope ||
       (limited.targetType === "domain" && runtimeState.domain !== limited.domain) ||
-      runtimeState.sessionStartedAt === null ||
-      runtimeState.sessionStartedAt >= now
+      !isReasonableLiveSession(liveSessionStartedAt, now) ||
+      liveSessionStartedAt === null
     ) {
       return persistedMs;
     }
 
     const liveMs =
-      splitDurationByLocalDate(runtimeState.sessionStartedAt, now).find(
+      splitDurationByLocalDate(liveSessionStartedAt, now).find(
         (slice) => slice.dateKey === today
       )?.durationMs ?? 0;
 
@@ -224,18 +239,19 @@ export class TimeLimitManager {
         0
       );
     const runtimeState = await this.dependencies.runtimeStateStore.get(now);
+    const liveSessionStartedAt = runtimeState.sessionStartedAt;
 
     if (
       runtimeState.status !== "tracking" ||
       normalizeWindowScope(runtimeState.windowScope) !== limited.windowScope ||
       (limited.targetType === "domain" && runtimeState.domain !== limited.domain) ||
-      runtimeState.sessionStartedAt === null ||
-      runtimeState.sessionStartedAt >= now
+      !isReasonableLiveSession(liveSessionStartedAt, now) ||
+      liveSessionStartedAt === null
     ) {
       return completedMs;
     }
 
-    return completedMs + overlapDurationMs(runtimeState.sessionStartedAt, now, intervals);
+    return completedMs + overlapDurationMs(liveSessionStartedAt, now, intervals);
   }
 
   private async getTodayUsageMs(limited: TimeLimitedDomain, now: number): Promise<number> {
@@ -324,8 +340,9 @@ export class TimeLimitManager {
         ? tabUrl
         : limited.domain
           ? `https://${limited.domain}/`
-          : "about:blank";
+        : "about:blank";
 
+    await this.dependencies.trackingEngine?.stopTrackingForTab(tabId, "navigation");
     await browser.tabs.update(tabId, {
       url: buildTimeLimitPageUrl(limited, returnUrl)
     });

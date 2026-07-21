@@ -50,7 +50,7 @@ function createStores(db: IDBDatabase): void {
     const dailyUsage = db.createObjectStore(STORE_DAILY_USAGE, { keyPath: "id" });
     dailyUsage.createIndex(INDEX_DATE_KEY, "dateKey", { unique: false });
     dailyUsage.createIndex(INDEX_DOMAIN, "domain", { unique: false });
-    dailyUsage.createIndex(INDEX_DATE_DOMAIN, ["dateKey", "domain"], { unique: true });
+    dailyUsage.createIndex(INDEX_DATE_DOMAIN, ["dateKey", "domain"], { unique: false });
   }
 
   if (!db.objectStoreNames.contains(STORE_BLOCK_ATTEMPTS)) {
@@ -78,6 +78,26 @@ function createStores(db: IDBDatabase): void {
   }
 }
 
+function migrateStores(db: IDBDatabase, transaction: IDBTransaction | null): void {
+  if (!transaction || !db.objectStoreNames.contains(STORE_DAILY_USAGE)) {
+    return;
+  }
+
+  const dailyUsage = transaction.objectStore(STORE_DAILY_USAGE);
+
+  if (dailyUsage.indexNames.contains(INDEX_DATE_DOMAIN)) {
+    const dateDomainIndex = dailyUsage.index(INDEX_DATE_DOMAIN);
+
+    if (!dateDomainIndex.unique) {
+      return;
+    }
+
+    dailyUsage.deleteIndex(INDEX_DATE_DOMAIN);
+  }
+
+  dailyUsage.createIndex(INDEX_DATE_DOMAIN, ["dateKey", "domain"], { unique: false });
+}
+
 export async function openDatabase(): Promise<IDBDatabase> {
   if (databasePromise) {
     return databasePromise;
@@ -88,6 +108,7 @@ export async function openDatabase(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = () => {
       createStores(request.result);
+      migrateStores(request.result, request.transaction);
     };
 
     request.onsuccess = () => resolve(request.result);

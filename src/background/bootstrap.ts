@@ -68,7 +68,8 @@ function createBackgroundServices() {
     runtimeStateStore,
     dailyUsageRepository,
     sessionRepository,
-    timeLimitRuleManager
+    timeLimitRuleManager,
+    trackingEngine
   });
   const mediaActivityTracker = new MediaActivityTracker({
     settingsStore,
@@ -133,6 +134,7 @@ function getBackgroundServices(): BackgroundServices {
 async function initializeCore(services: BackgroundServices): Promise<void> {
   await runMigrations();
   const settingsMigration = await services.settingsStore.migrateStoredSettings();
+  await services.dataControlService.repairUsageData();
   const settings = settingsMigration.settings;
   setIdleDetectionInterval(settings.idleThresholdSeconds);
   await services.blockRuleManager.refreshDynamicRules(
@@ -140,8 +142,6 @@ async function initializeCore(services: BackgroundServices): Promise<void> {
     Date.now(),
     settings.privateBrowserTrackingEnabled
   );
-  await services.timeLimitManager.refresh();
-  await services.blockRuleManager.enforceMatchingTabs(settings);
   await services.frictionRuleManager.refreshDynamicRules(
     (await services.visionSettingsStore.get()).frictionRules
   );
@@ -159,6 +159,9 @@ export async function bootstrap(reason: ReconcileReason): Promise<void> {
     reason === "startup" ? "startup" : "background-wakeup"
   );
   await services.trackingEngine.bootstrap(reason);
+  const settings = await services.settingsStore.get();
+  await services.timeLimitManager.refresh();
+  await services.blockRuleManager.enforceMatchingTabs(settings);
 }
 
 export function registerBackgroundListeners(): void {

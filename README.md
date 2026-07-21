@@ -8,9 +8,9 @@ Project site: https://princengare.github.io/0wl/
 
 Firefox Add-ons listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
 
-Current codebase release: `0.1.6`
+Current codebase release: `0.1.7`
 
-Current Mozilla-approved listing: `0.1.5`
+Current Mozilla-approved listing: `0.1.6`
 
 Documentation maintenance note: after each user-facing edit, update this README, the public project site, and the privacy policy when the edit affects privacy behavior. Edits made on the same day should be grouped under the next incrementing version number.
 
@@ -28,6 +28,8 @@ Documentation maintenance note: after each user-facing edit, update this README,
 - Vision pathways now compress repeated domains and research/dev loops into short behavioral summaries instead of long raw domain chains.
 - Picture-in-Picture and background media are tracked as separate history modes where the browser exposes PiP state, and live media sessions appear in History before playback stops.
 - Privacy-policy links are available from private browsing tracking and Data Control, and the public 0wl documentation/privacy site is treated as app surface rather than browsing time.
+- Version `0.1.7` hardens zero-limit/private tracking repair, keeps regular-window live tracking visible in History, and makes blocked/time-limit interstitial pages fit inside one viewport with their footer.
+- Vision reports exclude private-window browsing, blocked attempts, and private block rules from the normal Vision views.
 - These changes make the UI more consistent with the 0wl aesthetic.
 
 ## Open Source and Repository Safety
@@ -414,11 +416,23 @@ Version `0.1.6` adds privacy and media-bucket refinements:
 - Privacy-policy links now keep the terminal-style black-and-white interaction instead of browser-default link colors, and the Data Control Privacy Policy button is left aligned.
 - The public 0wl documentation/privacy site is excluded from active browsing and media tracking because it is part of using the app.
 - Picture-in-Picture and background media tracking are kept separate when PiP is detectable; ordinary non-active video records as background media, and live media sessions appear in History before playback stops.
+- Zero-minute private browsing limits now stop tracking before redirect, reject stale live sessions in History, refuse to persist 24-hour-plus active sessions, repair impossible local usage rows without clearing valid data, and treat legacy missing runtime scope as regular so normal-window tracking recovers correctly.
+
+Version `0.1.7` hardens update and reload safety:
+
+- History reads run usage-data repair before returning chart/session rows, so impossible local rows do not keep polluting Today, Yesterday, or This Week graphs.
+- Active sessions at or above 24 hours are treated as stale recovery artifacts, not valid browsing time.
+- Legacy runtime states without a window scope recover as regular-window tracking instead of making regular History look inactive.
+- Time-limit redirects stop the active session before navigating to the extension interstitial, preventing zero-minute limits from producing phantom long sessions.
+- Blocked-site and time-limit interstitial pages now fit inside one viewport including the footer.
+- Vision reports use regular-window sessions, transitions, blocked attempts, and block rules only, so private-window blocked sites do not appear in normal Vision block outcomes.
+- Vision Insights now explicitly surfaces recovery time, blocked-attempt heatmap buckets, transition analytics, focus interruptions, session drift, attempt chains, substitutions, and adaptive-blocking status.
+- Blocked-attempt heatmap recommendations include the dominant domain and apply as a scheduled block/update instead of a no-op recommendation.
 
 The `vision` page has four tabs:
 
 - `patterns`: common transitions, distraction pathways, focus interruptions, drift, and evasion.
-- `insights`: trends, pre-distraction context, block outcomes, substitutions, bounce-back, and net reclaimed time.
+- `insights`: trends, recovery, blocked-attempt heatmaps, transition analytics, focus interruption analysis, session drift, attempt chains, pre-distraction context, block outcomes, substitutions, bounce-back, net reclaimed time, and adaptive-blocking status.
 - `recommendations`: local recommendations plus adaptive settings and friction rules.
 - `site categories`: seeded and user-edited domain classifications.
 
@@ -675,7 +689,7 @@ Sessions record why they started:
 IndexedDB database:
 
 - Name: `focus_tracker`
-- Version: `2`
+- Version: `3`
 
 Object stores:
 
@@ -684,6 +698,8 @@ Object stores:
 - `block_attempts`: local blocked-navigation attempts bucketed by domain and minute.
 - `domain_transitions`: local transitions between completed sessions, used by the `vision` page.
 - `browsing_intents`: local friction/intent prompt records.
+
+On startup and before History reads, 0wl can repair impossible local usage data caused by stale runtime state. It removes only invalid active sessions that are 24 hours or longer or mathematically inconsistent, resets stale live runtime state without awarding phantom time, and rebuilds the derived `daily_usage` aggregate from remaining valid sessions. New session writes also refuse to persist 24-hour-plus active sessions.
 
 `browser.storage.local` stores:
 
@@ -727,445 +743,19 @@ The manifest declares:
 
 ## Features to Be Added
 
-### Distraction Pathways
+### Local Device Browser Sync
 
-Track the sequence of websites that leads from focused activity into distraction.
-
-Example:
-
-```text
-leetcode.com
--> google.com
--> youtube.com
--> instagram.com
-```
-
-The system should identify recurring distraction paths, including:
-
-- where the distraction started
-- which websites appeared in the sequence
-- how often the same pathway occurs
-- average time lost during the diversion
-- most common transitions into distracting sites
-
-### Pre-Distraction Context
-
-Analyze what the user was doing immediately before opening a distracting website.
-
-Example insights:
-
-- 42% of Instagram visits occur after coding websites
-- 27% occur after school-related websites
-- 18% occur after email
-- 13% occur after other browsing
-
-This should help determine which activities are most frequently interrupted.
-
-### Recovery Time
-
-Measure how long it takes the user to return to their previous focused activity after becoming distracted.
-
-Example:
-
-```text
-2:00 PM  github.com
-2:17 PM  instagram.com
-2:26 PM  youtube.com
-2:41 PM  github.com
-```
-
-The system should calculate:
-
-- direct distraction duration
-- time until return to the original focus context
-- average recovery time by distracting website
-- total weekly time lost before returning to focused activity
-
-This metric should be presented as a product-defined behavioral estimate rather than a scientifically validated measure of cognitive recovery.
-
-### Blocked Attempt Heatmaps
-
-Visualize when blocked-site attempts occur most frequently.
-
-Heatmaps should support analysis by:
-
-- hour of day
-- day of week
-- website
-- weekday versus weekend behavior
-
-Example insight:
-
-> Instagram attempts occur most frequently between 1-4 PM on weekdays and after 11 PM on weekends.
-
-### Behavior-Based Block Recommendations
-
-Use actual browsing and blocked-attempt patterns to suggest better blocking schedules.
-
-Example:
-
-> You attempted to open Instagram 38 times between 1-4 PM this week.
-
-Suggested action:
-
-```text
-Block instagram.com
-Weekdays
-1:00 PM-4:00 PM
-```
-
-Recommendations should be generated from local behavioral data.
-
-### Graduated Friction Levels
-
-Support multiple intervention levels instead of only allowing or blocking a website.
-
-#### Level 0: Allowed
-
-The website opens normally.
-
-#### Level 1: Pause
-
-Require a short delay before entering.
-
-Example:
-
-```text
-You have opened Instagram 8 times today.
-
-Continue?
-
-[ Go Back ]
-
-Continue available in 5 seconds
-```
-
-#### Level 2: Intent Prompt
-
-Ask why the user is opening the site.
-
-Example:
-
-```text
-Why are you opening Instagram?
-
-[ Post something ]
-[ Reply to someone ]
-[ Browse ]
-[ Other ]
-```
-
-#### Level 3: Delayed Unlock
-
-Require a longer waiting period before access.
-
-Example:
-
-```text
-Available in 30 seconds
-```
-
-#### Level 4: Hard Block
-
-Prevent access completely.
-
-### Intent-Based Browsing
-
-Allow users to declare why they are opening a potentially distracting website.
-
-Example:
-
-```text
-What are you here to do?
-
-[ Search for a tutorial ]
-[ Watch something saved ]
-[ Entertainment ]
-[ Skip ]
-```
-
-The system should remember the selected intention and later check whether the user is still following it.
-
-Example:
-
-```text
-You opened YouTube to:
-"Search for a tutorial"
-
-You have been here for:
-15 minutes
-
-Still doing that?
-
-[ Yes ]
-[ I'm off track ]
-```
-
-### Session Drift Detection
-
-Detect when a focused browsing session gradually transitions into unrelated or distracting activity.
-
-Example:
-
-```text
-github.com
--> stackoverflow.com
--> developer.mozilla.org
--> youtube.com
--> reddit.com
--> instagram.com
-```
-
-The system should identify:
-
-- starting focus context
-- ending distraction context
-- total drift duration
-- full transition path
-- average time before drift occurs
-- websites commonly involved in drift
-
-Example insight:
-
-> Your coding sessions most often begin to drift after approximately 43 minutes.
-
-### Adaptive Interventions
-
-Use historical drift patterns to recommend or trigger interventions before distraction usually occurs.
-
-Example:
-
-```text
-After 35 minutes of coding,
-require confirmation before opening:
-
-reddit.com
-instagram.com
-youtube.com
-```
-
-Interventions should be based on the user's actual historical behavior.
-
-### Block Effectiveness
-
-Measure what happens after a website is blocked.
-
-Possible outcomes:
-
-- user returns to previous focused site
-- user opens another distracting site
-- user closes Firefox
-- user removes or disables the block
-
-Example:
-
-```text
-Instagram
-
-Attempts blocked: 47
-
-Returned to work: 68%
-Opened another distraction: 21%
-Disabled block: 11%
-```
-
-### Bounce-Back Rate
-
-Calculate how often a blocked attempt successfully results in the user returning to productive or previous activity.
-
-Example:
-
-```text
-Bounce-back rate:
-68%
-```
-
-This should help determine whether a block is genuinely useful.
-
-### Distraction Substitution Detection
-
-Detect when blocking one website causes increased use of another distracting website.
-
-Example:
-
-```text
-Since blocking instagram.com:
-
-Instagram:
--74 min/day
-
-Reddit:
-+39 min/day
-
-YouTube Shorts:
-+21 min/day
-```
-
-The system should identify likely replacement behaviors rather than assuming blocked time was fully saved.
-
-### Net Time Reclaimed
-
-Estimate the actual amount of time recovered after accounting for replacement distractions.
-
-Example:
-
-```text
-Estimated blocked time:
-2h 14m
-
-Replacement distraction:
-1h 31m
-
-Net time reclaimed:
-43m
-```
-
-This should provide a more honest measure of whether blocking behavior is actually improving time use.
-
-### Attempt Chains
-
-Detect sequences where a blocked-site attempt is followed by visits to alternative distracting websites.
-
-Example:
-
-```text
-Instagram blocked
--> Reddit
--> X
--> YouTube
-```
-
-The system should record:
-
-- original blocked website
-- substitute websites visited afterward
-- total diversion duration
-- recurring substitution chains
-- most common fallback distraction
-
-### Block Evasion Detection
-
-Identify patterns where the user repeatedly attempts to bypass a block indirectly by opening alternative websites.
-
-Example insight:
-
-> After an Instagram block, your most common substitute is Reddit.
-
-The system may then suggest:
-
-```text
-Block Reddit together with Instagram?
-```
-
-### Transition Analytics
-
-Analyze website-to-website movement rather than viewing every site as an isolated time bucket.
-
-Potential metrics:
-
-- most common domain transitions
-- most common transitions into distracting sites
-- most common transitions out of focused sites
-- transition frequency
-- average time before switching
-- recurring behavioral sequences
-
-### Focus Interruption Analysis
-
-Measure which productive or focused websites are interrupted most often.
-
-Example:
-
-```text
-Instagram interruptions
-
-From github.com:       21
-From leetcode.com:     14
-From docs.google.com:   9
-From gmail.com:         6
-```
-
-This should help show the behavioral cost of distractions rather than only the duration spent on them.
-
-### Personalized Behavioral Insights
-
-Generate local insights from browsing patterns.
-
-Examples:
-
-- You most often open Instagram after 40-50 minutes of coding.
-- Reddit is your most common substitute after Instagram is blocked.
-- Your highest blocked-attempt period is between 1-4 PM.
-- You return to focused work after 68% of blocked Instagram attempts.
-- YouTube is involved in 47% of your distraction pathways.
-- Your average diversion from GitHub lasts 31 minutes.
-
-### Adaptive Blocking
-
-Allow blocking behavior to change based on observed patterns.
-
-Examples:
-
-- increase friction after repeated attempts
-- recommend new block windows
-- temporarily group substitute distractions together
-- trigger a pause after repeated focus interruptions
-- increase intervention strength during known high-risk periods
-
-### Long-Term Behavioral Trends
-
-Track how distraction behavior changes over time.
-
-Potential metrics:
-
-- average daily distraction time
-- average recovery time
-- bounce-back rate
-- net time reclaimed
-- substitution rate
-- blocked-attempt frequency
-- most common distraction pathways
-- average time before session drift
-- focus interruption frequency
-
-Support comparisons across:
-
-- days
-- weeks
-- months
-
-### Persistent Firefox Installation
-
-Support permanent installation in Firefox so the extension remains installed and automatically starts whenever Firefox opens.
+Sync 0wl data across the browsers installed on the same local device.
 
 Planned capabilities:
 
-- signed Firefox `.xpi` builds
-- persistent installation across browser restarts
-- Firefox-specific extension ID configuration
-- self-distributed or AMO-distributed releases
-- clear installation documentation for stable builds
-
-### Automatic Development Reload
-
-Add a streamlined development workflow that automatically rebuilds and reloads the extension when source files change.
-
-Planned capabilities:
-
-- watch TypeScript and React source files
-- automatically rebuild extension assets
-- automatically reload the extension in Firefox
-- avoid repeatedly using `about:debugging`
-- provide a single development command such as `npm run dev:firefox`
-
-Expected workflow:
-
-```text
-Edit source code
--> Save
--> Rebuild
--> Firefox reloads extension
-```
+- sync Firefox, Chrome, Edge, Opera, and Safari 0wl data on one computer
+- keep the sync local to the device
+- preserve local-first privacy without accounts, telemetry, or cloud sync
+- merge sessions, daily usage, blocked sites, time limits, friction rules, Vision settings, and site categories safely
+- prevent duplicate sessions and double-counted aggregates during sync
+- let users review conflicts before overwriting local data
+- keep browser-specific extension IDs and storage constraints documented
 
 ### Automatic Extension Updates
 
@@ -1208,23 +798,6 @@ Stable channel:
 
 The goal is to prevent experimental builds from corrupting real browsing history or production tracking data.
 
-### One-Command Development Environment
-
-Create a single command such as:
-
-```sh
-npm run dev:firefox
-```
-
-The command should:
-
-- start the WXT build/watch process
-- watch extension output files
-- launch Firefox
-- load the extension automatically
-- reload the extension after source changes
-- surface build and extension errors in the terminal
-
 ### Extension Data Migration
 
 Support safe updates to local extension data as the application evolves.
@@ -1237,19 +810,6 @@ Planned capabilities:
 - preservation of historical browsing data
 - preservation of blocked-site rules
 - rollback-safe migrations where possible
-
-### Update Safety
-
-Ensure extension updates do not corrupt active tracking sessions or historical data.
-
-Planned protections:
-
-- safely recover or close active sessions during update/reload
-- validate settings after update
-- rebuild dynamic block rules after update
-- preserve blocked-domain configuration
-- prevent duplicate sessions after extension reload
-- recover safely from interrupted updates
 
 ### Version and Release Management
 
@@ -1273,7 +833,8 @@ Example release progression:
 0.1.3  Vision insights, WXT cross-browser builds, and UI consistency with the 0wl aesthetic
 0.1.4  Mozilla-approved Settings data control, local backups, 0wl footers, and concise Vision summaries
 0.1.5  Mozilla-approved privacy links, 0wl site tracking exclusion, and separated PiP/background media refinements
-0.1.6  Source release target for popup-only privacy link placement, terminal privacy-link styling, and media-bucket refinements
+0.1.6  Approved popup-only privacy links, terminal privacy-link styling, media-bucket refinements, and zero-limit usage repair
+0.1.7  Update-safety hardening, regular History recovery, one-viewport interstitial pages, and verified Vision roadmap outputs
 0.3.0  Expanded behavioral intelligence
 1.0.0  Stable public release
 ```

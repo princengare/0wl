@@ -4,9 +4,9 @@
 
 0wl is approved and listed on Mozilla Add-ons.
 
-Current approved version: `0.1.5`
+Current approved version: `0.1.6`
 
-Current source release target: `0.1.6`
+Current source release target: `0.1.7`
 
 Install from Firefox Add-ons:
 

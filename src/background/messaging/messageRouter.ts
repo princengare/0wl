@@ -10,6 +10,7 @@ import type { SessionRepository } from "@/db/repositories/SessionRepository";
 import type { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import type { SettingsStore } from "@/storage/SettingsStore";
 import { browser } from "@/shared/browser";
+import { MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS } from "@/shared/constants";
 import { setIdleDetectionInterval } from "@/platform/idleApi";
 import { normalizeWindowScope } from "@/platform/windowScope";
 import type { DomainClassifier } from "@/vision/classification/DomainClassifier";
@@ -101,6 +102,18 @@ function normalizeUsageMode(value: UsageMode | undefined): UsageMode {
   return value === "pip" || value === "background" ? value : "active";
 }
 
+function isReasonableLiveSession(sessionStartedAt: number | null, now: number): boolean {
+  return (
+    sessionStartedAt !== null &&
+    sessionStartedAt < now &&
+    now - sessionStartedAt < MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS
+  );
+}
+
+async function repairUsageDataIfAvailable(dependencies: MessageRouterDependencies): Promise<void> {
+  await dependencies.dataControlService?.repairUsageData?.();
+}
+
 async function getTodaySummary({
   dailyUsageRepository,
   runtimeStateStore,
@@ -110,29 +123,25 @@ async function getTodaySummary({
   const dateKey = getDateKey(now);
   const rows = await dailyUsageRepository.listByDate(dateKey, "regular");
   const runtimeState = await runtimeStateStore.get(now);
+  const liveSessionStartedAt = runtimeState.sessionStartedAt;
+  const hasRegularLiveSession =
+    runtimeState.status === "tracking" &&
+    runtimeState.windowScope === "regular" &&
+    isReasonableLiveSession(liveSessionStartedAt, now);
   const liveRows = addLiveDurationToDailyRows(
     rows,
-    runtimeState.status === "tracking" && runtimeState.windowScope === "regular"
-      ? runtimeState.domain
-      : null,
-    runtimeState.status === "tracking" && runtimeState.windowScope === "regular"
-      ? runtimeState.sessionStartedAt
-      : null,
+    hasRegularLiveSession ? runtimeState.domain : null,
+    hasRegularLiveSession ? liveSessionStartedAt : null,
     now
   ).sort((a, b) => b.durationMs - a.durationMs);
 
   return {
     dateKey,
     totalDurationMs: liveRows.reduce((sum, row) => sum + row.durationMs, 0),
-    currentDomain:
-      runtimeState.status === "tracking" && runtimeState.windowScope === "regular"
-        ? runtimeState.domain
-        : null,
+    currentDomain: hasRegularLiveSession ? runtimeState.domain : null,
     currentSessionElapsedMs:
-      runtimeState.status === "tracking" &&
-      runtimeState.windowScope === "regular" &&
-      runtimeState.sessionStartedAt
-        ? Math.max(0, now - runtimeState.sessionStartedAt)
+      hasRegularLiveSession && liveSessionStartedAt !== null
+        ? Math.max(0, now - liveSessionStartedAt)
         : 0,
     domains: liveRows.map((row) => ({
       domain: row.domain,
@@ -180,6 +189,7 @@ async function getHistoryInterval(
     usageMode
   );
   const runtimeState = await dependencies.runtimeStateStore.get(now);
+  const liveSessionStartedAt = runtimeState.sessionStartedAt;
   const liveMediaSessions =
     usageMode === "active"
       ? []
@@ -193,11 +203,12 @@ async function getHistoryInterval(
     runtimeState.status === "tracking" &&
     normalizeWindowScope(runtimeState.windowScope) === windowScope &&
     runtimeState.domain &&
-    runtimeState.sessionStartedAt !== null &&
-    runtimeState.sessionStartedAt < end &&
+    isReasonableLiveSession(liveSessionStartedAt, now) &&
+    liveSessionStartedAt !== null &&
+    liveSessionStartedAt < end &&
     now > start
   ) {
-    const startedAt = Math.max(runtimeState.sessionStartedAt, start);
+    const startedAt = Math.max(liveSessionStartedAt, start);
     const endedAt = Math.min(now, end);
 
     if (endedAt > startedAt) {
@@ -245,6 +256,7 @@ export async function routeMessage(
       return ok(await getTodaySummary(dependencies));
 
     case "GET_HISTORY":
+      await repairUsageDataIfAvailable(dependencies);
       return ok(
         await getHistory(
           message.range,
@@ -255,6 +267,7 @@ export async function routeMessage(
       );
 
     case "GET_HISTORY_INTERVAL":
+      await repairUsageDataIfAvailable(dependencies);
       return ok(
         await getHistoryInterval(
           message.startedAt,
@@ -509,17 +522,42 @@ export async function routeMessage(
       }
 
       if (recommendation.action.type === "add_block") {
-        await dependencies.settingsStore.addBlockedDomain(
-          recommendation.action.domain,
-          dependencies.now?.() ?? Date.now(),
-          recommendation.action.schedule
+        const action = recommendation.action;
+        const now = dependencies.now?.() ?? Date.now();
+        const currentSettings = await dependencies.settingsStore.get(now);
+        const existingBlocked = currentSettings.blockedDomains.find(
+          (blocked) =>
+            blocked.domain === action.domain &&
+            normalizeWindowScope(blocked.windowScope) === "regular"
         );
-        const settings = await dependencies.settingsStore.get();
+
+        if (existingBlocked) {
+          await dependencies.settingsStore.updateBlockedDomain(
+            existingBlocked.id,
+            action.domain,
+            action.schedule,
+            now,
+            "regular"
+          );
+        } else {
+          await dependencies.settingsStore.addBlockedDomain(
+            action.domain,
+            now,
+            action.schedule,
+            "regular"
+          );
+        }
+
+        const settings = await dependencies.settingsStore.get(now);
         await dependencies.blockRuleManager.refreshDynamicRules(
           settings.blockedDomains,
-          dependencies.now?.() ?? Date.now(),
+          now,
           settings.privateBrowserTrackingEnabled
         );
+        await dependencies.blockRuleManager.enforceMatchingTabs(settings, {
+          domain: action.domain,
+          windowScope: "regular"
+        });
       } else if (recommendation.action.type === "add_friction") {
         const settings = await dependencies.visionSettingsStore.upsertFrictionRule(
           recommendation.action.domain,

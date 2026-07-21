@@ -1,6 +1,7 @@
 import type { BlockAttemptRepository } from "@/db/repositories/BlockAttemptRepository";
 import type { SessionRepository } from "@/db/repositories/SessionRepository";
 import type { SettingsStore } from "@/storage/SettingsStore";
+import { normalizeWindowScope } from "@/platform/windowScope";
 import { FocusInterruptionAnalyzer } from "./context/FocusInterruptionAnalyzer";
 import { PreDistractionContextAnalyzer } from "./context/PreDistractionContextAnalyzer";
 import type { DomainClassifier } from "./classification/DomainClassifier";
@@ -47,30 +48,57 @@ export class VisionReportService {
       this.dependencies.settingsStore.get(now),
       this.dependencies.visionSettingsStore.get(now)
     ]);
-    const visitedDomains = [...new Set(sessions.map((session) => session.domain))];
+    const regularSessions = sessions.filter(
+      (session) => normalizeWindowScope(session.windowScope) === "regular"
+    );
+    const regularAttempts = attempts.filter(
+      (attempt) => normalizeWindowScope(attempt.windowScope) === "regular"
+    );
+    const regularSessionIds = new Set(regularSessions.map((session) => session.id));
+    const regularTransitions = transitions.filter(
+      (transition) =>
+        regularSessionIds.has(transition.fromSessionId) &&
+        regularSessionIds.has(transition.toSessionId)
+    );
+    const regularBlockedDomains = settings.blockedDomains.filter(
+      (blocked) => normalizeWindowScope(blocked.windowScope) === "regular"
+    );
+    const visitedDomains = [...new Set(regularSessions.map((session) => session.domain))];
     const classifications = await this.dependencies.domainClassifier.classifyMany(visitedDomains);
     const classifiedDomains =
       await this.dependencies.domainClassifier.listClassifiedDomains(visitedDomains);
     const unclassifiedDomains =
       await this.dependencies.domainClassifier.listUnclassifiedDomains(visitedDomains);
-    const pathways = new DistractionPathwayDetector().detect(sessions, classifications);
-    const attemptChains = new AttemptChainDetector().detect(attempts, sessions, classifications);
-    const contexts = new PreDistractionContextAnalyzer().analyze(transitions);
-    const focusInterruptions = new FocusInterruptionAnalyzer().analyze(transitions);
-    const recovery = new RecoveryTimeAnalyzer().analyze(sessions, classifications, now);
-    const heatmap = new BlockAttemptHeatmapAnalyzer().analyze(attempts);
-    const blockOutcomes = new BlockOutcomeAnalyzer().analyze(attempts, sessions, classifications);
+    const pathways = new DistractionPathwayDetector().detect(regularSessions, classifications);
+    const attemptChains = new AttemptChainDetector().detect(
+      regularAttempts,
+      regularSessions,
+      classifications
+    );
+    const contexts = new PreDistractionContextAnalyzer().analyze(regularTransitions);
+    const focusInterruptions = new FocusInterruptionAnalyzer().analyze(regularTransitions);
+    const recovery = new RecoveryTimeAnalyzer().analyze(regularSessions, classifications, now);
+    const heatmap = new BlockAttemptHeatmapAnalyzer().analyze(regularAttempts);
+    const blockOutcomes = new BlockOutcomeAnalyzer().analyze(
+      regularAttempts,
+      regularSessions,
+      classifications
+    );
     const bounceBackRate = new BounceBackAnalyzer().rate(blockOutcomes);
-    const blockEvasions = new BlockEvasionDetector().detect(attempts, sessions, classifications);
+    const blockEvasions = new BlockEvasionDetector().detect(
+      regularAttempts,
+      regularSessions,
+      classifications
+    );
     const substitutions = new SubstitutionDetector().detect(
-      settings.blockedDomains,
-      sessions,
+      regularBlockedDomains,
+      regularSessions,
       classifications
     );
     const netTimeReclaimedMsPerDay = new NetTimeReclaimedAnalyzer().total(substitutions);
     const trends = new LongTermTrendAnalyzer().analyze(
-      sessions,
-      attempts,
+      regularSessions,
+      regularAttempts,
       classifications,
       focusInterruptions.reduce((sum, row) => sum + row.count, 0),
       now
@@ -95,8 +123,8 @@ export class VisionReportService {
       seedClassificationCount: this.dependencies.domainClassifier.seedCount,
       classifiedDomains,
       unclassifiedDomains,
-      transitions: mostCommonTransitions(transitions),
-      distractionTransitions: transitionsIntoDistraction(transitions),
+      transitions: mostCommonTransitions(regularTransitions),
+      distractionTransitions: transitionsIntoDistraction(regularTransitions),
       focusInterruptions,
       pathways,
       sessionDrifts: sessionDriftsFromPathways(pathways),

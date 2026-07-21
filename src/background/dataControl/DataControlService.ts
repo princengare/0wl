@@ -8,6 +8,7 @@ import {
 import { openDatabase, requestToPromise, transactionDone } from "@/db/database";
 import {
   LIFECYCLE_STORAGE_KEY,
+  MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS,
   RUNTIME_SESSION_META_STORAGE_KEY,
   RUNTIME_STATE_STORAGE_KEY,
   SETTINGS_STORAGE_KEY,
@@ -15,7 +16,7 @@ import {
   VISION_SETTINGS_STORAGE_KEY
 } from "@/shared/constants";
 import { browser as extensionBrowser } from "@/shared/browser";
-import { getDateKey, startOfLocalDay } from "@/shared/time";
+import { getDateKey, splitDurationByLocalDate, startOfLocalDay } from "@/shared/time";
 import { isPlainObject } from "@/shared/validation";
 import { setIdleDetectionInterval } from "@/platform/idleApi";
 import { createDefaultSettings } from "@/storage/defaults";
@@ -38,7 +39,10 @@ import type {
   ExtensionSettings,
   HistoryRetentionDays,
   TimeLimitedDomain,
-  UsageSession
+  UsageDataRepairResult,
+  UsageMode,
+  UsageSession,
+  WindowScope
 } from "@/shared/types";
 import type { DomainTransition, VisionSettings } from "@/vision/types";
 
@@ -76,6 +80,8 @@ const USER_STORAGE_KEYS = [
   VISION_SETTINGS_STORAGE_KEY,
   VISION_CLASSIFICATIONS_STORAGE_KEY
 ] as const;
+
+const SESSION_DURATION_TOLERANCE_MS = 1000;
 
 const RESET_STORAGE_KEYS = [
   ...USER_STORAGE_KEYS,
@@ -178,6 +184,22 @@ async function clearStore(storeName: StoreName): Promise<void> {
   await transactionDone(transaction);
 }
 
+async function deleteRowsById(storeName: StoreName, ids: string[]): Promise<void> {
+  if (ids.length === 0) {
+    return;
+  }
+
+  const db = await openDatabase();
+  const transaction = db.transaction(storeName, "readwrite");
+  const store = transaction.objectStore(storeName);
+
+  for (const id of ids) {
+    store.delete(id);
+  }
+
+  await transactionDone(transaction);
+}
+
 async function putRows<T>(storeName: StoreName, rows: T[]): Promise<void> {
   if (rows.length === 0) {
     return;
@@ -205,6 +227,118 @@ async function keepRows<T>(storeName: StoreName, keep: (row: T) => boolean): Pro
 
 function isPrivateScoped(row: { windowScope?: unknown }): boolean {
   return normalizeWindowScope(row.windowScope) === "private";
+}
+
+function normalizeUsageMode(value: unknown): UsageMode {
+  return value === "pip" || value === "background" ? value : "active";
+}
+
+function dailyUsageId(dateKey: string, domain: string, windowScope: WindowScope): string {
+  return windowScope === "regular"
+    ? `${dateKey}::${domain}`
+    : `${dateKey}::${windowScope}::${domain}`;
+}
+
+function isFiniteNonNegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isRepairableSession(session: UsageSession): boolean {
+  if (
+    typeof session.id !== "string" ||
+    typeof session.domain !== "string" ||
+    session.domain.trim().length === 0 ||
+    !isFiniteNonNegativeNumber(session.startedAt) ||
+    !isFiniteNonNegativeNumber(session.endedAt) ||
+    !isFiniteNonNegativeNumber(session.durationMs) ||
+    session.durationMs <= 0 ||
+    session.endedAt <= session.startedAt
+  ) {
+    return false;
+  }
+
+  const elapsedMs = session.endedAt - session.startedAt;
+
+  if (Math.abs(elapsedMs - session.durationMs) > SESSION_DURATION_TOLERANCE_MS) {
+    return false;
+  }
+
+  return (
+    normalizeUsageMode(session.usageMode) !== "active" ||
+    elapsedMs < MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS
+  );
+}
+
+function isSuspiciousDailyUsage(row: DailyUsage): boolean {
+  return (
+    typeof row.id !== "string" ||
+    typeof row.dateKey !== "string" ||
+    typeof row.domain !== "string" ||
+    row.domain.trim().length === 0 ||
+    typeof row.durationMs !== "number" ||
+    !Number.isFinite(row.durationMs) ||
+    row.durationMs < 0 ||
+    row.durationMs >= MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS ||
+    typeof row.sessionCount !== "number" ||
+    !Number.isFinite(row.sessionCount) ||
+    row.sessionCount < 0
+  );
+}
+
+function buildDailyUsageRowsFromSessions(sessions: UsageSession[], now: number): DailyUsage[] {
+  const rowsById = new Map<string, DailyUsage>();
+
+  for (const session of sessions) {
+    if (normalizeUsageMode(session.usageMode) !== "active" || !isRepairableSession(session)) {
+      continue;
+    }
+
+    const windowScope = normalizeWindowScope(session.windowScope);
+
+    for (const slice of splitDurationByLocalDate(session.startedAt, session.endedAt)) {
+      const id = dailyUsageId(slice.dateKey, session.domain, windowScope);
+      const existing = rowsById.get(id);
+      const remainingDailyMs = Math.max(
+        0,
+        MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS - (existing?.durationMs ?? 0)
+      );
+      const durationMs = Math.min(slice.durationMs, remainingDailyMs);
+
+      if (durationMs <= 0) {
+        continue;
+      }
+
+      rowsById.set(id, {
+        id,
+        dateKey: slice.dateKey,
+        domain: session.domain,
+        windowScope,
+        durationMs: (existing?.durationMs ?? 0) + durationMs,
+        sessionCount: (existing?.sessionCount ?? 0) + 1,
+        lastUpdatedAt: Math.max(existing?.lastUpdatedAt ?? 0, session.createdAt || now)
+      });
+    }
+  }
+
+  return [...rowsById.values()].sort(
+    (a, b) =>
+      a.dateKey.localeCompare(b.dateKey) ||
+      normalizeWindowScope(a.windowScope).localeCompare(normalizeWindowScope(b.windowScope)) ||
+      a.domain.localeCompare(b.domain)
+  );
+}
+
+function isStaleRuntimeTrackingState(
+  state: Awaited<ReturnType<RuntimeStateStore["get"]>>,
+  now: number
+): boolean {
+  return (
+    state.status === "tracking" &&
+    (state.sessionStartedAt === null ||
+      !Number.isFinite(state.sessionStartedAt) ||
+      now <= state.sessionStartedAt ||
+      now - state.sessionStartedAt >= MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS)
+  );
 }
 
 export class DataControlService {
@@ -352,6 +486,47 @@ export class DataControlService {
     await this.dependencies.runtimeStateStore.resetInactive(this.now());
     await this.refreshSideEffects();
     return this.getStatus();
+  }
+
+  async repairUsageData(): Promise<UsageDataRepairResult> {
+    const now = this.now();
+    const [sessions, dailyUsageRows] = await Promise.all([
+      listStore<UsageSession>(STORE_SESSIONS),
+      listStore<DailyUsage>(STORE_DAILY_USAGE)
+    ]);
+    const invalidSessionIds = sessions
+      .filter((session) => !isRepairableSession(session))
+      .map((session) => session.id)
+      .filter((id): id is string => typeof id === "string");
+
+    if (invalidSessionIds.length > 0) {
+      await deleteRowsById(STORE_SESSIONS, invalidSessionIds);
+    }
+
+    const validSessions = sessions.filter(isRepairableSession);
+    const shouldRebuildDailyUsage =
+      invalidSessionIds.length > 0 || dailyUsageRows.some(isSuspiciousDailyUsage);
+    let rebuiltDailyUsageRecords = dailyUsageRows.length;
+
+    if (shouldRebuildDailyUsage) {
+      const rebuiltRows = buildDailyUsageRowsFromSessions(validSessions, now);
+      await clearStore(STORE_DAILY_USAGE);
+      await putRows(STORE_DAILY_USAGE, rebuiltRows);
+      rebuiltDailyUsageRecords = rebuiltRows.length;
+    }
+
+    const runtimeState = await this.dependencies.runtimeStateStore.get(now);
+    const resetStaleRuntimeState = isStaleRuntimeTrackingState(runtimeState, now);
+
+    if (resetStaleRuntimeState) {
+      await this.dependencies.runtimeStateStore.resetInactive(now);
+    }
+
+    return {
+      removedSessions: invalidSessionIds.length,
+      rebuiltDailyUsageRecords,
+      resetStaleRuntimeState
+    };
   }
 
   async resetAllLocalData(confirmation: string): Promise<DataControlStatus> {

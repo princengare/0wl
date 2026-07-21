@@ -51,6 +51,10 @@ Settings includes local Data Control tools for viewing local data status, export
 
 Exported backup files may contain sensitive browsing patterns. Keep them private and do not commit them.
 
+0wl may run a local repair pass for impossible usage rows caused by stale runtime state. This stays in your browser, removes only mathematically invalid active sessions or 24-hour-plus active sessions, refuses to write new 24-hour-plus active sessions, and rebuilds derived daily aggregates from valid completed sessions.
+
+Normal Vision reports use regular-window sessions, transitions, blocked attempts, and block rules only. Private-window browsing and private-window blocked sites are not shown in normal Vision block outcomes or recommendations.
+
 ## Network Policy
 
 0wl should not:

@@ -1,5 +1,5 @@
 export const DATABASE_NAME = "focus_tracker";
-export const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 
 export const SETTINGS_STORAGE_KEY = "settings";
 export const RUNTIME_STATE_STORAGE_KEY = "runtimeTrackingState";
@@ -27,5 +27,6 @@ export const INTENT_CHECKIN_DURATION_MS = 15 * 60 * 1000;
 
 export const DEFAULT_IDLE_THRESHOLD_SECONDS = 60;
 export const MIN_VALID_SESSION_DURATION_MS = 1;
+export const MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
 export const MEDIA_HEARTBEAT_INTERVAL_MS = 15 * 1000;
 export const MEDIA_REPORT_STALE_MS = 45 * 1000;

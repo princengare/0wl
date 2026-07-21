@@ -44,7 +44,8 @@ import {
   ALWAYS_SCHEDULE,
   WEEKDAYS,
   WEEKENDS,
-  formatScheduleSummary
+  formatScheduleSummary,
+  formatTimeOfDay
 } from "@/shared/schedule";
 import type {
   BlockedDomain,
@@ -264,6 +265,19 @@ function formatFrictionLevel(level: FrictionLevel): string {
     case 4:
       return "Hard stop";
   }
+}
+
+function formatVisionHourRange(hour: number): string {
+  const start = Math.max(0, Math.min(23, hour)) * 60;
+  const end = hour === 23 ? 0 : (hour + 1) * 60;
+
+  return `${formatTimeOfDay(start)}-${formatTimeOfDay(end)}`;
+}
+
+function formatVisionDayHour(dayOfWeek: number, hour: number): string {
+  const dayLabel = dayOfWeek >= 0 && dayOfWeek < dayLabels.length ? dayLabels[dayOfWeek] : "?";
+
+  return `${dayLabel} ${formatVisionHourRange(hour)}`;
 }
 
 function timeLimitDisplayName(limited: TimeLimitedDomain): string {
@@ -1931,6 +1945,50 @@ function VisionPage(): React.JSX.Element {
           </section>
 
           <section>
+            <h2 className="terminal-title">Recovery time</h2>
+            <div className="terminal-grid">
+              <span>Average recovery</span>
+              <span>{formatHistoryDuration(report.recovery.averageRecoveryMs)}</span>
+              <span>This week</span>
+              <span>{formatHistoryDuration(report.recovery.weeklyRecoveryMs)}</span>
+            </div>
+            <SummaryList empty="No recovery estimates yet.">
+              {report.recovery.worstDomains.map((row) => (
+                <div className="terminal-list-row" key={row.domain}>
+                  <span>{row.domain}</span>
+                  <span>{formatHistoryDuration(row.averageRecoveryMs)}</span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Blocked attempt heatmap</h2>
+            <SummaryList empty="No blocked-attempt heatmap yet.">
+              {[...report.heatmap]
+                .sort((a, b) => b.count - a.count || a.dayOfWeek - b.dayOfWeek || a.hour - b.hour)
+                .slice(0, 6)
+                .map((cell) => {
+                  const topDomain = cell.domains[0];
+
+                  return (
+                    <div className="terminal-list-row" key={`${cell.dayOfWeek}:${cell.hour}`}>
+                      <span>{formatVisionDayHour(cell.dayOfWeek, cell.hour)}</span>
+                      <span className="terminal-rule-copy">
+                        <span>{cell.count}x</span>
+                        {topDomain ? (
+                          <span className="terminal-muted">
+                            {topDomain.domain} {topDomain.count}x
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                  );
+                })}
+            </SummaryList>
+          </section>
+
+          <section>
             <h2 className="terminal-title">Personal insights</h2>
             <SummaryList empty="Insights appear after more local history is available.">
               {report.insights.map((insight) => (
@@ -1959,6 +2017,56 @@ function VisionPage(): React.JSX.Element {
           </section>
 
           <section>
+            <h2 className="terminal-title">Transition analytics</h2>
+            <SummaryList empty="No distraction transitions yet.">
+              {report.distractionTransitions.slice(0, 6).map((transition) => (
+                <div className="terminal-list-row" key={`distraction:${transition.id}`}>
+                  <span>{`${transition.fromDomain} -> ${transition.toDomain}`}</span>
+                  <span>{transition.count}x</span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Focus interruption analysis</h2>
+            <SummaryList empty="No focus interruptions detected yet.">
+              {report.focusInterruptions.slice(0, 6).map((transition) => (
+                <div className="terminal-list-row" key={`interruption:${transition.id}`}>
+                  <span>{`${transition.fromDomain} -> ${transition.toDomain}`}</span>
+                  <span>{transition.count}x</span>
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Session drift detection</h2>
+            <SummaryList empty="No session drift detected yet.">
+              {report.sessionDrifts.map((pathway) => (
+                <PathwaySummaryRow
+                  key={`insight:${pathway.id}`}
+                  pathway={pathway}
+                  metric={formatHistoryDuration(pathway.averageDiversionMs)}
+                />
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Attempt chains</h2>
+            <SummaryList empty="No attempt chains detected yet.">
+              {report.attemptChains.map((pathway) => (
+                <PathwaySummaryRow
+                  key={pathway.id}
+                  pathway={pathway}
+                  metric={`${pathway.count}x`}
+                />
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
             <h2 className="terminal-title">Block outcomes</h2>
             <SummaryList empty="No blocked-site outcomes yet.">
               {report.blockOutcomes.map((outcome) => (
@@ -1971,6 +2079,42 @@ function VisionPage(): React.JSX.Element {
                 </div>
               ))}
             </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Distraction substitution</h2>
+            <SummaryList empty="No substitution patterns detected yet.">
+              {report.substitutions.map((substitution) => (
+                <div className="terminal-rule" key={substitution.blockedDomain}>
+                  <span>{substitution.blockedDomain}</span>
+                  <span className="terminal-muted">
+                    reclaimed {formatHistoryDuration(substitution.decreasedMsPerDay)} / day
+                  </span>
+                  {substitution.substitutes[0] ? (
+                    <span>
+                      substitute {substitution.substitutes[0].domain} +{" "}
+                      {formatHistoryDuration(substitution.substitutes[0].increasedMsPerDay)} / day
+                    </span>
+                  ) : (
+                    <span>no substitute increase detected</span>
+                  )}
+                </div>
+              ))}
+            </SummaryList>
+          </section>
+
+          <section>
+            <h2 className="terminal-title">Adaptive blocking</h2>
+            <div className="terminal-grid">
+              <span>Adaptive recommendations</span>
+              <span>{settings?.adaptiveRecommendationsEnabled ? "On" : "Off"}</span>
+              <span>Adaptive enforcement</span>
+              <span>{settings?.adaptiveEnforcementEnabled ? "On" : "Off"}</span>
+              <span>Friction rules</span>
+              <span>{settings?.frictionRules.length ?? 0}</span>
+              <span>Open recommendations</span>
+              <span>{report.recommendations.length}</span>
+            </div>
           </section>
         </div>
       ) : null}

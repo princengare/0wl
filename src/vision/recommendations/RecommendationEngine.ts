@@ -1,5 +1,6 @@
 import { ALWAYS_SCHEDULE } from "@/shared/schedule";
 import { formatDuration } from "@/shared/time";
+import type { DayOfWeek, ScheduleConfig } from "@/shared/types";
 import type {
   HeatmapCell,
   PathwaySummary,
@@ -7,6 +8,15 @@ import type {
   VisionRecommendation,
   VisionSettings
 } from "../types";
+
+function scheduleForHeatmapCell(cell: HeatmapCell): ScheduleConfig {
+  return {
+    mode: "custom",
+    daysOfWeek: [cell.dayOfWeek as DayOfWeek],
+    startMinutes: cell.hour * 60,
+    endMinutes: cell.hour === 23 ? 0 : (cell.hour + 1) * 60
+  };
+}
 
 export class RecommendationEngine {
   generate(input: {
@@ -22,16 +32,22 @@ export class RecommendationEngine {
     const recommendations: VisionRecommendation[] = [];
     const topHeatmap = [...input.heatmap].sort((a, b) => b.count - a.count)[0];
 
-    if (topHeatmap && topHeatmap.count >= 2) {
+    const topHeatmapDomain = topHeatmap?.domains[0] ?? null;
+
+    if (topHeatmap && topHeatmapDomain && topHeatmap.count >= 2) {
       recommendations.push({
-        id: `heatmap:${topHeatmap.dayOfWeek}:${topHeatmap.hour}`,
+        id: `heatmap:${topHeatmap.dayOfWeek}:${topHeatmap.hour}:${topHeatmapDomain.domain}`,
         title: "Schedule a block around repeated attempts",
-        reason: `Blocked attempts cluster around ${topHeatmap.hour}:00.`,
-        supportingMetric: `${topHeatmap.count} attempts in this hour bucket`,
-        proposedAction: "Create a scheduled block for the repeated domain.",
+        reason: `${topHeatmapDomain.domain} attempts cluster around ${topHeatmap.hour}:00.`,
+        supportingMetric: `${topHeatmapDomain.count} attempts in this hour bucket`,
+        proposedAction: `Create or update a scheduled block for ${topHeatmapDomain.domain}.`,
         strength: topHeatmap.count >= 5 ? "high" : "medium",
-        domains: [],
-        action: { type: "none" }
+        domains: [topHeatmapDomain.domain],
+        action: {
+          type: "add_block",
+          domain: topHeatmapDomain.domain,
+          schedule: scheduleForHeatmapCell(topHeatmap)
+        }
       });
     }
 

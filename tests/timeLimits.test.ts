@@ -82,10 +82,14 @@ function createManager(rows: DailyUsage[], now = TEST_NOW, sessions: UsageSessio
   const settingsStore = new SettingsStore(storage);
   const runtimeStateStore = new RuntimeStateStore(storage);
   const timeLimitRuleManager = new TimeLimitRuleManager();
+  const trackingEngine = {
+    stopTrackingForTab: vi.fn(async () => undefined)
+  };
   const manager = new TimeLimitManager({
     settingsStore,
     runtimeStateStore,
     timeLimitRuleManager,
+    trackingEngine,
     dailyUsageRepository: {
       listByDate: vi.fn(async (_dateKey: string, windowScope: "regular" | "private" = "regular") =>
         rows.filter((row) => (row.windowScope ?? "regular") === windowScope)
@@ -99,7 +103,7 @@ function createManager(rows: DailyUsage[], now = TEST_NOW, sessions: UsageSessio
     now: () => now
   });
 
-  return { manager, settingsStore, runtimeStateStore };
+  return { manager, settingsStore, runtimeStateStore, trackingEngine };
 }
 
 describe("time limits", () => {
@@ -350,6 +354,33 @@ describe("time limits", () => {
         url: expect.stringContaining("limit.html")
       })
     );
+  });
+
+  it("stops tracking before a zero-minute private limit redirects a tab", async () => {
+    makeBrowserMock([
+      {
+        id: 10,
+        url: "https://github.com/openai",
+        incognito: true
+      } as browser.tabs.Tab
+    ]);
+    const { manager, settingsStore, trackingEngine } = createManager([]);
+    await settingsStore.update({ privateBrowserTrackingEnabled: true }, 1);
+    const limited = await settingsStore.addTimeLimitedDomain(
+      "",
+      0,
+      2,
+      { mode: "always" },
+      "private"
+    );
+    const settings = await settingsStore.get(3);
+
+    await manager.enforceOpenTabsIfExceeded(settings, {
+      targetType: limited.targetType,
+      windowScope: limited.windowScope
+    });
+
+    expect(trackingEngine.stopTrackingForTab).toHaveBeenCalledWith(10, "navigation");
   });
 
   it("keeps regular and private browser-wide limits from affecting each other", async () => {

@@ -4,12 +4,41 @@ import { isTrackableUrl } from "@/shared/url";
 import { isAppSurfaceUrl } from "@/shared/appSurface";
 import { queryIdleState } from "@/platform/idleApi";
 import { windowScopeFromTab } from "@/platform/windowScope";
-import type { ActiveBrowserContext, ExtensionSettings } from "@/shared/types";
+import type { ActiveBrowserContext, ExtensionSettings, WindowScope } from "@/shared/types";
+
+type ResolverTab = {
+  active?: boolean;
+  id?: number;
+  url?: string;
+  incognito?: boolean;
+  windowScope?: WindowScope | null;
+};
+
+type ResolverWindow = {
+  id?: number;
+  focused?: boolean;
+  type?: string;
+  tabs?: ResolverTab[];
+};
+
+async function getNormalWindows(): Promise<ResolverWindow[]> {
+  try {
+    return (await extensionBrowser.windows.getAll({
+      populate: true,
+      windowTypes: ["normal"]
+    })) as ResolverWindow[];
+  } catch {
+    const windows = (await extensionBrowser.windows.getAll({
+      populate: true
+    })) as ResolverWindow[];
+    return windows.filter((window) => !window.type || window.type === "normal");
+  }
+}
 
 export class ActiveContextResolver {
   async resolve(settings: ExtensionSettings): Promise<ActiveBrowserContext> {
     const [windows, idleState] = await Promise.all([
-      extensionBrowser.windows.getAll({ populate: true, windowTypes: ["normal"] }),
+      getNormalWindows(),
       queryIdleState(settings.idleThresholdSeconds)
     ]);
 

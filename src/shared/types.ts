@@ -268,6 +268,12 @@ export interface DataControlStatus {
   historyRetentionDays: HistoryRetentionDays;
 }
 
+export interface UsageDataRepairResult {
+  removedSessions: number;
+  rebuiltDailyUsageRecords: number;
+  resetStaleRuntimeState: boolean;
+}
+
 export type DataImportMode = "merge" | "replace";
 
 export type DataDeleteTarget =

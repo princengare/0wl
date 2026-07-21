@@ -4,6 +4,21 @@ All notable changes to 0wl will be documented in this file.
 
 The project follows semantic versioning once public releases begin.
 
+## 0.1.7
+
+- Bumped the source release target and package metadata to 0.1.7.
+- Hardened zero-minute/private time-limit handling so limit redirects stop active tracking before showing the interstitial.
+- Prevented stale 24-hour-plus live sessions from appearing as impossible History graph bars.
+- Added usage-data repair before History reads so invalid local rows can be removed without clearing valid sessions, settings, blocked sites, time limits, or Vision data.
+- Recovered legacy runtime tracking state without a saved window scope as regular-window tracking so regular History does not appear inactive.
+- Tightened blocked-site and time-limit interstitial layout so the page, controls, and footer fit inside one viewport.
+- Excluded private-window browsing, blocked attempts, transitions, and block rules from normal Vision reports and block outcomes.
+- Surfaced the completed Vision roadmap sections in Insights, including recovery, blocked-attempt heatmaps, transition analytics, focus interruptions, drift, attempt chains, substitutions, and adaptive-blocking status.
+- Made blocked-attempt heatmap recommendations include the dominant domain and apply as scheduled block creates/updates.
+- Removed completed roadmap entries for persistent Firefox installation, automatic development reload, one-command development, and update safety from README future features.
+- Removed completed Vision roadmap entries from README future features and added local-device browser sync as a future feature.
+- Updated README and project site documentation for the 0.1.7 source target.
+
 ## 0.1.6
 
 - Bumped the source release target and package metadata to 0.1.6.

@@ -33,7 +33,7 @@
           <h2>current storage</h2>
           <div class="terminal-grid">
             <span>IndexedDB</span>
-            <span>focus_tracker v2</span>
+            <span>focus_tracker v3</span>
             <span>sessions</span>
             <span>source of truth</span>
             <span>daily_usage</span>
@@ -57,9 +57,21 @@
             <li>
               Version 2 adds <code>domain_transitions</code> and <code>browsing_intents</code>.
             </li>
+            <li>
+              Version 3 keeps all stores and records, then makes the
+              <code>daily_usage</code> date/domain index non-unique so regular and private rows can
+              coexist safely.
+            </li>
             <li>Vision settings and category overrides are additive local-storage records.</li>
             <li>Malformed settings are repaired without clearing valid records.</li>
             <li>Stale runtime sessions are invalidated without counting Firefox downtime.</li>
+            <li>
+              Legacy tracking runtime state without a saved window scope is treated as regular.
+            </li>
+            <li>
+              Impossible active-session rows and suspicious daily aggregates are repaired without
+              clearing valid local data.
+            </li>
             <li>Dynamic block and time-limit rules are rebuilt from settings on startup.</li>
           </ul>
         </section>
@@ -84,6 +96,16 @@
           <p class="muted">
             These actions operate only on local extension storage in the current browser. They do
             not add cloud sync, accounts, telemetry, or remote backup.
+          </p>
+          <p>
+            Version 0.1.7 keeps automatic usage-data repair active. On startup and before History
+            reads, 0wl can remove only impossible active sessions that are 24 hours or longer or
+            mathematically inconsistent, reset stale live runtime state without awarding phantom
+            time, and rebuild the derived <code>daily_usage</code> aggregate from remaining valid
+            sessions. New session writes also refuse to persist 24-hour-plus active sessions.
+          </p>
+          <p class="muted">
+            Settings, blocked sites, time limits, Vision data, and valid sessions are preserved.
           </p>
         </section>
 

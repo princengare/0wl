@@ -1,4 +1,7 @@
-import { MIN_VALID_SESSION_DURATION_MS } from "@/shared/constants";
+import {
+  MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS,
+  MIN_VALID_SESSION_DURATION_MS
+} from "@/shared/constants";
 import { getDateKey } from "@/shared/time";
 import { normalizeWindowScope } from "@/platform/windowScope";
 import type { EndReason, PersistedTrackingState, StartReason, UsageSession } from "@/shared/types";
@@ -33,7 +36,11 @@ export class SessionManager {
 
     const durationMs = endedAt - state.sessionStartedAt;
 
-    if (!Number.isFinite(durationMs) || durationMs < MIN_VALID_SESSION_DURATION_MS) {
+    if (
+      !Number.isFinite(durationMs) ||
+      durationMs < MIN_VALID_SESSION_DURATION_MS ||
+      durationMs >= MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS
+    ) {
       return null;
     }
 
