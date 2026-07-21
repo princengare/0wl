@@ -1,4 +1,4 @@
-import { ALWAYS_SCHEDULE } from "@/shared/schedule";
+import { ALWAYS_SCHEDULE, formatTimeOfDay } from "@/shared/schedule";
 import { formatDuration } from "@/shared/time";
 import type { DayOfWeek, ScheduleConfig } from "@/shared/types";
 import type {
@@ -16,6 +16,13 @@ function scheduleForHeatmapCell(cell: HeatmapCell): ScheduleConfig {
     startMinutes: cell.hour * 60,
     endMinutes: cell.hour === 23 ? 0 : (cell.hour + 1) * 60
   };
+}
+
+function heatmapTimeRangeLabel(cell: HeatmapCell): string {
+  const startMinutes = cell.hour * 60;
+  const endMinutes = cell.hour === 23 ? 0 : (cell.hour + 1) * 60;
+
+  return `${formatTimeOfDay(startMinutes)}-${formatTimeOfDay(endMinutes)}`;
 }
 
 export class RecommendationEngine {
@@ -38,7 +45,7 @@ export class RecommendationEngine {
       recommendations.push({
         id: `heatmap:${topHeatmap.dayOfWeek}:${topHeatmap.hour}:${topHeatmapDomain.domain}`,
         title: "Schedule a block around repeated attempts",
-        reason: `${topHeatmapDomain.domain} attempts cluster around ${topHeatmap.hour}:00.`,
+        reason: `${topHeatmapDomain.domain} attempts cluster around ${heatmapTimeRangeLabel(topHeatmap)}.`,
         supportingMetric: `${topHeatmapDomain.count} attempts in this hour bucket`,
         proposedAction: `Create or update a scheduled block for ${topHeatmapDomain.domain}.`,
         strength: topHeatmap.count >= 5 ? "high" : "medium",

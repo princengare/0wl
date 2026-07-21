@@ -8,9 +8,9 @@ Project site: https://princengare.github.io/0wl/
 
 Firefox Add-ons listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
 
-Current codebase release: `0.1.7`
+Current codebase release: `0.1.8`
 
-Current Mozilla-approved listing: `0.1.6`
+Current Mozilla-approved listing: `0.1.8`
 
 Documentation maintenance note: after each user-facing edit, update this README, the public project site, and the privacy policy when the edit affects privacy behavior. Edits made on the same day should be grouped under the next incrementing version number.
 
@@ -28,7 +28,7 @@ Documentation maintenance note: after each user-facing edit, update this README,
 - Vision pathways now compress repeated domains and research/dev loops into short behavioral summaries instead of long raw domain chains.
 - Picture-in-Picture and background media are tracked as separate history modes where the browser exposes PiP state, and live media sessions appear in History before playback stops.
 - Privacy-policy links are available from private browsing tracking and Data Control, and the public 0wl documentation/privacy site is treated as app surface rather than browsing time.
-- Version `0.1.7` hardens zero-limit/private tracking repair, keeps regular-window live tracking visible in History, and makes blocked/time-limit interstitial pages fit inside one viewport with their footer.
+- Version `0.1.8` hardens zero-limit/private tracking repair, cleans impossible overlapping History buckets, keeps regular-window live tracking visible in History and Today, and makes blocked/time-limit interstitial pages fit inside one viewport with their footer.
 - Vision reports exclude private-window browsing, blocked attempts, and private block rules from the normal Vision views.
 - These changes make the UI more consistent with the 0wl aesthetic.
 
@@ -418,21 +418,24 @@ Version `0.1.6` adds privacy and media-bucket refinements:
 - Picture-in-Picture and background media tracking are kept separate when PiP is detectable; ordinary non-active video records as background media, and live media sessions appear in History before playback stops.
 - Zero-minute private browsing limits now stop tracking before redirect, reject stale live sessions in History, refuse to persist 24-hour-plus active sessions, repair impossible local usage rows without clearing valid data, and treat legacy missing runtime scope as regular so normal-window tracking recovers correctly.
 
-Version `0.1.7` hardens update and reload safety:
+Version `0.1.8` hardens update and reload safety:
 
-- History reads run usage-data repair before returning chart/session rows, so impossible local rows do not keep polluting Today, Yesterday, or This Week graphs.
+- Today and History reads run usage-data repair before returning totals or chart/session rows, so impossible local rows do not keep polluting Today, Yesterday, or This Week graphs.
+- Repair removes completed active-session rows that make a one-hour bucket exceed one hour, then rebuilds `daily_usage` from the remaining valid completed sessions.
+- Stale `daily_usage` rows are rebuilt even when each individual row is under 24 hours, preventing old aggregate totals such as phantom all-day or multi-day usage from lingering.
 - Active sessions at or above 24 hours are treated as stale recovery artifacts, not valid browsing time.
 - Legacy runtime states without a window scope recover as regular-window tracking instead of making regular History look inactive.
 - Time-limit redirects stop the active session before navigating to the extension interstitial, preventing zero-minute limits from producing phantom long sessions.
 - Blocked-site and time-limit interstitial pages now fit inside one viewport including the footer.
 - Vision reports use regular-window sessions, transitions, blocked attempts, and block rules only, so private-window blocked sites do not appear in normal Vision block outcomes.
-- Vision Insights now explicitly surfaces recovery time, blocked-attempt heatmap buckets, transition analytics, focus interruptions, session drift, attempt chains, substitutions, and adaptive-blocking status.
-- Blocked-attempt heatmap recommendations include the dominant domain and apply as a scheduled block/update instead of a no-op recommendation.
+- Vision Insights now explicitly surfaces recovery time, blocked-attempt heatmap buckets, transition analytics, focus interruptions, session drift, attempt chains, substitutions, and local block outcomes.
+- Recovery-time domains are shown as boxed rows, and blocked-attempt heatmap labels use full weekday names so Tuesday and Thursday are distinct.
+- Blocked-attempt heatmap recommendations use 12-hour AM/PM time labels, include the dominant domain, and apply as a scheduled block/update instead of a no-op recommendation.
 
 The `vision` page has four tabs:
 
 - `patterns`: common transitions, distraction pathways, focus interruptions, drift, and evasion.
-- `insights`: trends, recovery, blocked-attempt heatmaps, transition analytics, focus interruption analysis, session drift, attempt chains, pre-distraction context, block outcomes, substitutions, bounce-back, net reclaimed time, and adaptive-blocking status.
+- `insights`: trends, recovery, blocked-attempt heatmaps, transition analytics, focus interruption analysis, session drift, attempt chains, pre-distraction context, block outcomes, substitutions, bounce-back, and net reclaimed time.
 - `recommendations`: local recommendations plus adaptive settings and friction rules.
 - `site categories`: seeded and user-edited domain classifications.
 
@@ -699,7 +702,7 @@ Object stores:
 - `domain_transitions`: local transitions between completed sessions, used by the `vision` page.
 - `browsing_intents`: local friction/intent prompt records.
 
-On startup and before History reads, 0wl can repair impossible local usage data caused by stale runtime state. It removes only invalid active sessions that are 24 hours or longer or mathematically inconsistent, resets stale live runtime state without awarding phantom time, and rebuilds the derived `daily_usage` aggregate from remaining valid sessions. New session writes also refuse to persist 24-hour-plus active sessions.
+On startup and before Today/History reads, 0wl can repair impossible local usage data caused by stale runtime state. It removes invalid active sessions that are 24 hours or longer, mathematically inconsistent, or part of an impossible overlapping one-hour active bucket, resets stale live runtime state without awarding phantom time, and rebuilds the derived `daily_usage` aggregate from remaining valid sessions. New session writes also refuse to persist 24-hour-plus active sessions.
 
 `browser.storage.local` stores:
 
@@ -834,7 +837,8 @@ Example release progression:
 0.1.4  Mozilla-approved Settings data control, local backups, 0wl footers, and concise Vision summaries
 0.1.5  Mozilla-approved privacy links, 0wl site tracking exclusion, and separated PiP/background media refinements
 0.1.6  Approved popup-only privacy links, terminal privacy-link styling, media-bucket refinements, and zero-limit usage repair
-0.1.7  Update-safety hardening, regular History recovery, one-viewport interstitial pages, and verified Vision roadmap outputs
+0.1.7  Update-safety hardening, usage-data cleanup, regular History/Today recovery, one-viewport interstitial pages, and verified Vision roadmap outputs
+0.1.8  Mozilla-approved usage-data repair hardening and Vision heatmap/recovery UI cleanup
 0.3.0  Expanded behavioral intelligence
 1.0.0  Stable public release
 ```

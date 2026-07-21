@@ -92,7 +92,7 @@ You can:
 
 Exported backup files may contain sensitive browsing patterns. Keep them private and do not commit them to GitHub.
 
-0wl may also run a local repair pass for impossible usage rows caused by stale runtime state. This repair stays in your browser, removes only mathematically invalid active sessions or 24-hour-plus active sessions, refuses to write new 24-hour-plus active sessions, and rebuilds derived daily aggregates from valid completed sessions.
+0wl may also run a local repair pass for impossible usage rows caused by stale runtime state. This repair stays in your browser, removes mathematically invalid active sessions, 24-hour-plus active sessions, or completed active-session rows that make a one-hour bucket physically exceed one hour, refuses to write new 24-hour-plus active sessions, and rebuilds derived daily aggregates from remaining valid completed sessions.
 
 Normal Vision reports use regular-window sessions, transitions, blocked attempts, and block rules only. Private-window browsing and private-window blocked sites are not shown in normal Vision block outcomes or recommendations.
 
@@ -110,7 +110,7 @@ The site links to external services such as Mozilla Add-ons and GitHub, which ha
 
 0wl uses local migrations when the extension changes its data model. The goal is to preserve existing sessions, settings, blocked sites, time limits, schedules, and Vision data across updates whenever technically possible.
 
-Version `0.1.7` keeps the same database name and stores while preserving the local aggregate index and keeping the usage repair described above active before History reads.
+Version `0.1.8` keeps the same database name and stores while preserving the local aggregate index and keeping the usage repair described above active before Today and History reads.
 
 ## Open Source
 

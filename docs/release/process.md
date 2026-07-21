@@ -10,15 +10,16 @@
 0.1.5  Privacy links, app surface tracking exclusion, and PiP/background media separation
 0.1.6  Popup-only privacy links, terminal privacy-link styling, media refinements, and zero-limit usage repair
 0.1.7  Update-safety hardening, regular History recovery, one-viewport interstitial pages, and verified Vision roadmap outputs
+0.1.8  Usage-data repair hardening and Vision heatmap/recovery UI cleanup
 0.3.0  Expanded behavioral intelligence
 1.0.0  Stable public release
 ```
 
 Release status:
 
-- Source target: `0.1.7`
-- Approved version: `0.1.6`
-- Status: 0.1.6 approved and listed on Mozilla Add-ons. 0.1.7 is the current source target with Vision recovery, heatmaps, transitions, interruptions, drift, attempt chains, substitutions, and applyable recommendations surfaced in the dashboard.
+- Source target: `0.1.8`
+- Approved version: `0.1.8`
+- Status: 0.1.8 is approved and listed on Mozilla Add-ons with stronger usage-data repair, regular History/Today recovery, Vision recovery, heatmaps, transitions, interruptions, drift, attempt chains, substitutions, clearer heatmap/recommendation labels, and applyable recommendations surfaced in the dashboard.
 - Listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
 
 ## Stable Release Checklist

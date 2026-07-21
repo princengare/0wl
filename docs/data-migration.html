@@ -69,8 +69,8 @@
               Legacy tracking runtime state without a saved window scope is treated as regular.
             </li>
             <li>
-              Impossible active-session rows and suspicious daily aggregates are repaired without
-              clearing valid local data.
+              Impossible active-session rows, impossible hourly active buckets, and stale daily
+              aggregates are repaired without clearing unrelated local data.
             </li>
             <li>Dynamic block and time-limit rules are rebuilt from settings on startup.</li>
           </ul>
@@ -98,14 +98,17 @@
             not add cloud sync, accounts, telemetry, or remote backup.
           </p>
           <p>
-            Version 0.1.7 keeps automatic usage-data repair active. On startup and before History
-            reads, 0wl can remove only impossible active sessions that are 24 hours or longer or
-            mathematically inconsistent, reset stale live runtime state without awarding phantom
-            time, and rebuild the derived <code>daily_usage</code> aggregate from remaining valid
-            sessions. New session writes also refuse to persist 24-hour-plus active sessions.
+            Version 0.1.8 keeps automatic usage-data repair active. On startup and before Today or
+            History reads, 0wl can remove impossible active sessions that are 24 hours or longer,
+            mathematically inconsistent, or part of an impossible overlapping one-hour active
+            bucket, reset stale live runtime state without awarding phantom time, and rebuild the
+            derived <code>daily_usage</code> aggregate from remaining valid sessions. Stale
+            aggregate rows are rebuilt even when individual rows are under 24 hours. New session
+            writes also refuse to persist 24-hour-plus active sessions.
           </p>
           <p class="muted">
-            Settings, blocked sites, time limits, Vision data, and valid sessions are preserved.
+            Settings, blocked sites, time limits, Vision data, and valid sessions are preserved
+            wherever the corrupted rows can be isolated.
           </p>
         </section>
 

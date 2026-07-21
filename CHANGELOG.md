@@ -4,6 +4,18 @@ All notable changes to 0wl will be documented in this file.
 
 The project follows semantic versioning once public releases begin.
 
+## 0.1.8
+
+- Bumped the source release target and package metadata to 0.1.8.
+- Marked 0.1.8 as the Mozilla-approved Firefox Add-ons release in documentation.
+- Strengthened usage-data repair before Today and History reads so impossible overlapping hourly active buckets are removed and stale `daily_usage` rows are rebuilt from valid completed sessions.
+- Kept legacy runtime tracking state without a saved window scope visible as regular-window live usage in Today and History.
+- Removed Adaptive Blocking from Vision Insights because Adaptive Settings live under Recommendations.
+- Improved Vision heatmap labels with full weekday names and removed duplicate per-domain `2x`/count text.
+- Changed blocked-attempt heatmap recommendation copy to use 12-hour AM/PM time ranges.
+- Boxed Recovery Time domain rows for easier scanning.
+- Updated README and project site documentation for the 0.1.8 approved release.
+
 ## 0.1.7
 
 - Bumped the source release target and package metadata to 0.1.7.

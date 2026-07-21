@@ -16,7 +16,12 @@ import {
   VISION_SETTINGS_STORAGE_KEY
 } from "@/shared/constants";
 import { browser as extensionBrowser } from "@/shared/browser";
-import { getDateKey, splitDurationByLocalDate, startOfLocalDay } from "@/shared/time";
+import {
+  getDateKey,
+  splitDurationByLocalDate,
+  splitDurationByLocalHour,
+  startOfLocalDay
+} from "@/shared/time";
 import { isPlainObject } from "@/shared/validation";
 import { setIdleDetectionInterval } from "@/platform/idleApi";
 import { createDefaultSettings } from "@/storage/defaults";
@@ -82,6 +87,7 @@ const USER_STORAGE_KEYS = [
 ] as const;
 
 const SESSION_DURATION_TOLERANCE_MS = 1000;
+const MAX_ACTIVE_HOUR_BUCKET_MS = 60 * 60 * 1000;
 
 const RESET_STORAGE_KEYS = [
   ...USER_STORAGE_KEYS,
@@ -110,20 +116,25 @@ function jsonByteLength(value: unknown): number {
 }
 
 function minFinite(values: Array<number | null | undefined>): number | null {
-  const finite = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const finite = values.filter(
+    (value): value is number => typeof value === "number" && Number.isFinite(value)
+  );
   return finite.length > 0 ? Math.min(...finite) : null;
 }
 
-function mergeDomainKey(item: { domain: string | null; windowScope?: unknown; targetType?: unknown }): string {
+function mergeDomainKey(item: {
+  domain: string | null;
+  windowScope?: unknown;
+  targetType?: unknown;
+}): string {
   return `${normalizeWindowScope(item.windowScope)}::${String(item.targetType ?? "domain")}::${
     item.domain ?? "all-browsing"
   }`;
 }
 
-function mergeByDomain<T extends { domain: string | null; windowScope?: unknown; targetType?: unknown }>(
-  current: T[],
-  incoming: T[]
-): T[] {
+function mergeByDomain<
+  T extends { domain: string | null; windowScope?: unknown; targetType?: unknown }
+>(current: T[], incoming: T[]): T[] {
   const byDomain = new Map(current.map((item) => [mergeDomainKey(item), item]));
 
   for (const item of incoming) {
@@ -285,6 +296,44 @@ function isSuspiciousDailyUsage(row: DailyUsage): boolean {
   );
 }
 
+function findImpossibleActiveBucketSessionIds(sessions: UsageSession[]): Set<string> {
+  const buckets = new Map<string, { totalMs: number; sessionIds: Set<string> }>();
+
+  for (const session of sessions) {
+    if (
+      normalizeUsageMode(session.usageMode) !== "active" ||
+      typeof session.id !== "string" ||
+      !isRepairableSession(session)
+    ) {
+      continue;
+    }
+
+    const windowScope = normalizeWindowScope(session.windowScope);
+
+    for (const slice of splitDurationByLocalHour(session.startedAt, session.endedAt)) {
+      const key = `${windowScope}::${slice.bucketStart}`;
+      const bucket = buckets.get(key) ?? { totalMs: 0, sessionIds: new Set<string>() };
+      bucket.totalMs += slice.durationMs;
+      bucket.sessionIds.add(session.id);
+      buckets.set(key, bucket);
+    }
+  }
+
+  const impossibleSessionIds = new Set<string>();
+
+  for (const bucket of buckets.values()) {
+    if (bucket.totalMs <= MAX_ACTIVE_HOUR_BUCKET_MS + SESSION_DURATION_TOLERANCE_MS) {
+      continue;
+    }
+
+    for (const id of bucket.sessionIds) {
+      impossibleSessionIds.add(id);
+    }
+  }
+
+  return impossibleSessionIds;
+}
+
 function buildDailyUsageRowsFromSessions(sessions: UsageSession[], now: number): DailyUsage[] {
   const rowsById = new Map<string, DailyUsage>();
 
@@ -326,6 +375,57 @@ function buildDailyUsageRowsFromSessions(sessions: UsageSession[], now: number):
       normalizeWindowScope(a.windowScope).localeCompare(normalizeWindowScope(b.windowScope)) ||
       a.domain.localeCompare(b.domain)
   );
+}
+
+function dailyUsageRowsDiffer(existingRows: DailyUsage[], rebuiltRows: DailyUsage[]): boolean {
+  const existingById = new Map<string, DailyUsage>();
+  const rebuiltById = new Map<string, DailyUsage>();
+
+  for (const row of existingRows) {
+    if (isSuspiciousDailyUsage(row)) {
+      return true;
+    }
+
+    const windowScope = normalizeWindowScope(row.windowScope);
+    const id = dailyUsageId(row.dateKey, row.domain, windowScope);
+
+    if (row.id !== id) {
+      return true;
+    }
+
+    existingById.set(id, {
+      ...row,
+      windowScope
+    });
+  }
+
+  for (const row of rebuiltRows) {
+    rebuiltById.set(row.id, row);
+  }
+
+  if (existingById.size !== rebuiltById.size) {
+    return true;
+  }
+
+  for (const [id, rebuilt] of rebuiltById) {
+    const existing = existingById.get(id);
+
+    if (!existing) {
+      return true;
+    }
+
+    if (
+      existing.dateKey !== rebuilt.dateKey ||
+      existing.domain !== rebuilt.domain ||
+      normalizeWindowScope(existing.windowScope) !== normalizeWindowScope(rebuilt.windowScope) ||
+      existing.sessionCount !== rebuilt.sessionCount ||
+      Math.abs(existing.durationMs - rebuilt.durationMs) > SESSION_DURATION_TOLERANCE_MS
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isStaleRuntimeTrackingState(
@@ -498,18 +598,25 @@ export class DataControlService {
       .filter((session) => !isRepairableSession(session))
       .map((session) => session.id)
       .filter((id): id is string => typeof id === "string");
+    const validSessionsBeforeBucketRepair = sessions.filter(isRepairableSession);
+    const impossibleBucketSessionIds = findImpossibleActiveBucketSessionIds(
+      validSessionsBeforeBucketRepair
+    );
+    const removedSessionIds = [...new Set([...invalidSessionIds, ...impossibleBucketSessionIds])];
 
-    if (invalidSessionIds.length > 0) {
-      await deleteRowsById(STORE_SESSIONS, invalidSessionIds);
+    if (removedSessionIds.length > 0) {
+      await deleteRowsById(STORE_SESSIONS, removedSessionIds);
     }
 
-    const validSessions = sessions.filter(isRepairableSession);
+    const validSessions = validSessionsBeforeBucketRepair.filter(
+      (session) => !impossibleBucketSessionIds.has(session.id)
+    );
+    const rebuiltRows = buildDailyUsageRowsFromSessions(validSessions, now);
     const shouldRebuildDailyUsage =
-      invalidSessionIds.length > 0 || dailyUsageRows.some(isSuspiciousDailyUsage);
+      removedSessionIds.length > 0 || dailyUsageRowsDiffer(dailyUsageRows, rebuiltRows);
     let rebuiltDailyUsageRecords = dailyUsageRows.length;
 
     if (shouldRebuildDailyUsage) {
-      const rebuiltRows = buildDailyUsageRowsFromSessions(validSessions, now);
       await clearStore(STORE_DAILY_USAGE);
       await putRows(STORE_DAILY_USAGE, rebuiltRows);
       rebuiltDailyUsageRecords = rebuiltRows.length;
@@ -523,7 +630,7 @@ export class DataControlService {
     }
 
     return {
-      removedSessions: invalidSessionIds.length,
+      removedSessions: removedSessionIds.length,
       rebuiltDailyUsageRecords,
       resetStaleRuntimeState
     };
@@ -589,7 +696,9 @@ export class DataControlService {
     if (mode === "replace") {
       await this.storageArea.set({
         ...(storage.settings ? { [SETTINGS_STORAGE_KEY]: storage.settings } : {}),
-        ...(storage.visionSettings ? { [VISION_SETTINGS_STORAGE_KEY]: storage.visionSettings } : {}),
+        ...(storage.visionSettings
+          ? { [VISION_SETTINGS_STORAGE_KEY]: storage.visionSettings }
+          : {}),
         [VISION_CLASSIFICATIONS_STORAGE_KEY]: storage.visionDomainClassifications
       });
       await this.dependencies.settingsStore.migrateStoredSettings(this.now());
@@ -610,7 +719,9 @@ export class DataControlService {
           currentSettings.timeLimitedDomains,
           incoming.timeLimitedDomains
         ),
-        ignoredDomains: [...new Set([...currentSettings.ignoredDomains, ...incoming.ignoredDomains])],
+        ignoredDomains: [
+          ...new Set([...currentSettings.ignoredDomains, ...incoming.ignoredDomains])
+        ],
         createdAt: Math.min(currentSettings.createdAt, incoming.createdAt),
         updatedAt: this.now()
       });

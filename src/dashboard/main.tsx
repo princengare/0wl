@@ -129,6 +129,15 @@ const privateTimeLimitOptions = privateTimeLimitMinutes.map((value) => ({
 }));
 
 const dayLabels = ["S", "M", "T", "W", "T", "F", "S"] as const;
+const visionDayLabels = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday"
+] as const;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
@@ -275,7 +284,10 @@ function formatVisionHourRange(hour: number): string {
 }
 
 function formatVisionDayHour(dayOfWeek: number, hour: number): string {
-  const dayLabel = dayOfWeek >= 0 && dayOfWeek < dayLabels.length ? dayLabels[dayOfWeek] : "?";
+  const dayLabel =
+    dayOfWeek >= 0 && dayOfWeek < visionDayLabels.length
+      ? visionDayLabels[dayOfWeek]
+      : "Unknown day";
 
   return `${dayLabel} ${formatVisionHourRange(hour)}`;
 }
@@ -1954,9 +1966,16 @@ function VisionPage(): React.JSX.Element {
             </div>
             <SummaryList empty="No recovery estimates yet.">
               {report.recovery.worstDomains.map((row) => (
-                <div className="terminal-list-row" key={row.domain}>
-                  <span>{row.domain}</span>
-                  <span>{formatHistoryDuration(row.averageRecoveryMs)}</span>
+                <div className="terminal-rule" key={row.domain}>
+                  <div className="terminal-list-row">
+                    <span className="terminal-rule-copy">
+                      <span>{row.domain}</span>
+                      <span className="terminal-muted">
+                        average recovery {formatHistoryDuration(row.averageRecoveryMs)}
+                      </span>
+                    </span>
+                    <span>{formatHistoryDuration(row.totalRecoveryMs)}</span>
+                  </div>
                 </div>
               ))}
             </SummaryList>
@@ -1977,9 +1996,7 @@ function VisionPage(): React.JSX.Element {
                       <span className="terminal-rule-copy">
                         <span>{cell.count}x</span>
                         {topDomain ? (
-                          <span className="terminal-muted">
-                            {topDomain.domain} {topDomain.count}x
-                          </span>
+                          <span className="terminal-muted">{topDomain.domain}</span>
                         ) : null}
                       </span>
                     </div>
@@ -2101,20 +2118,6 @@ function VisionPage(): React.JSX.Element {
                 </div>
               ))}
             </SummaryList>
-          </section>
-
-          <section>
-            <h2 className="terminal-title">Adaptive blocking</h2>
-            <div className="terminal-grid">
-              <span>Adaptive recommendations</span>
-              <span>{settings?.adaptiveRecommendationsEnabled ? "On" : "Off"}</span>
-              <span>Adaptive enforcement</span>
-              <span>{settings?.adaptiveEnforcementEnabled ? "On" : "Off"}</span>
-              <span>Friction rules</span>
-              <span>{settings?.frictionRules.length ?? 0}</span>
-              <span>Open recommendations</span>
-              <span>{report.recommendations.length}</span>
-            </div>
           </section>
         </div>
       ) : null}

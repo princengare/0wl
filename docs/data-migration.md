@@ -79,7 +79,7 @@ Data Control can:
 - clear selected local data categories after typed confirmation
 - reset settings or all local data only after confirmation
 
-Version `0.1.7` keeps automatic usage-data repair active on startup and before History reads. 0wl can remove only impossible active sessions that are 24 hours or longer or mathematically inconsistent, reset stale live runtime state without awarding phantom time, and rebuild the derived `daily_usage` aggregate from remaining valid sessions. New session writes also refuse to persist 24-hour-plus active sessions. Settings, blocked sites, time limits, Vision data, and valid sessions are preserved.
+Version `0.1.8` keeps automatic usage-data repair active on startup and before Today/History reads. 0wl can remove impossible active sessions that are 24 hours or longer, mathematically inconsistent, or part of an impossible overlapping one-hour active bucket, reset stale live runtime state without awarding phantom time, and rebuild the derived `daily_usage` aggregate from remaining valid sessions. Stale aggregate rows are rebuilt even when individual rows are under 24 hours. New session writes also refuse to persist 24-hour-plus active sessions. Settings, blocked sites, time limits, Vision data, and valid sessions are preserved wherever the corrupted rows can be isolated.
 
 These actions operate on local extension storage in the current browser. They do not add cloud sync, accounts, telemetry, or remote backup.
 
@@ -90,7 +90,7 @@ On update or reload:
 - do not count unknown downtime
 - invalidate stale active runtime sessions
 - treat legacy tracking runtime state without a saved window scope as regular
-- repair impossible active-session rows and suspicious daily aggregates without clearing valid local data
+- repair impossible active-session rows, impossible hourly active buckets, and stale daily aggregates without clearing unrelated local data
 - re-read current browser state
 - rebuild dynamic blocking, time-limit, and friction rules
 - reschedule block, time-limit, and friction alarms from saved settings

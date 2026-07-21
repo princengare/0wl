@@ -354,6 +354,7 @@ describe("vision classification and analytics", () => {
       ]
     });
     expect(recommendations[0]).toMatchObject({
+      reason: "instagram.com attempts cluster around 1:00 PM-2:00 PM.",
       domains: ["instagram.com"],
       action: {
         type: "add_block",

@@ -13,11 +13,7 @@ const TEST_DATE_KEY = "2026-07-20";
 const TEST_NOW = new Date(2026, 6, 20, 12, 0, 0).getTime();
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function makeSession(
-  id: string,
-  domain: string,
-  windowScope: "regular" | "private"
-): UsageSession {
+function makeSession(id: string, domain: string, windowScope: "regular" | "private"): UsageSession {
   return {
     id,
     domain,
@@ -100,12 +96,12 @@ describe("private browsing data control", () => {
     expect(remainingSessions.some((session) => session.id === "private-session")).toBe(false);
     expect(await dailyUsageRepository.listByDate(TEST_DATE_KEY, "regular")).toHaveLength(1);
     expect(await dailyUsageRepository.listByDate(TEST_DATE_KEY, "private")).toHaveLength(0);
-    expect(await blockAttemptRepository.countForDate("instagram.com", TEST_DATE_KEY, "regular")).toBe(
-      1
-    );
-    expect(await blockAttemptRepository.countForDate("instagram.com", TEST_DATE_KEY, "private")).toBe(
-      0
-    );
+    expect(
+      await blockAttemptRepository.countForDate("instagram.com", TEST_DATE_KEY, "regular")
+    ).toBe(1);
+    expect(
+      await blockAttemptRepository.countForDate("instagram.com", TEST_DATE_KEY, "private")
+    ).toBe(0);
   });
 
   it("repairs impossible usage rows without clearing valid local data", async () => {
@@ -212,5 +208,201 @@ describe("private browsing data control", () => {
     const settings = await settingsStore.get(repairNow);
     expect(settings.blockedDomains).toHaveLength(1);
     expect(settings.timeLimitedDomains).toHaveLength(1);
+  });
+
+  it("removes active sessions that make an hourly history bucket impossible", async () => {
+    const storage = new MemoryStorageArea() as unknown as browser.storage.StorageArea;
+    const settingsStore = new SettingsStore(storage);
+    const runtimeStateStore = new RuntimeStateStore(storage);
+    const visionSettingsStore = new VisionSettingsStore(storage);
+    const sessionRepository = new SessionRepository();
+    const dailyUsageRepository = new DailyUsageRepository();
+    const repairDateKey = "2026-07-22";
+    const repairNow = new Date(2026, 6, 22, 12, 0, 0).getTime();
+    const validStartedAt = new Date(2026, 6, 22, 9, 0, 0).getTime();
+    const validEndedAt = validStartedAt + 30 * 60 * 1000;
+    const bucketStartedAt = new Date(2026, 6, 22, 10, 0, 0).getTime();
+    const service = new DataControlService({
+      settingsStore,
+      runtimeStateStore,
+      visionSettingsStore,
+      blockRuleManager: {
+        refreshDynamicRules: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["blockRuleManager"],
+      timeLimitManager: {
+        refresh: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["timeLimitManager"],
+      frictionRuleManager: {
+        refreshDynamicRules: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["frictionRuleManager"],
+      trackingEngine: {
+        reconcileTrackingState: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["trackingEngine"],
+      seedSiteCategoryCount: 0,
+      storageArea: storage,
+      now: () => repairNow
+    });
+
+    await sessionRepository.add({
+      id: "valid-session-before-impossible-hour",
+      domain: "github.com",
+      windowScope: "regular",
+      usageMode: "active",
+      startedAt: validStartedAt,
+      endedAt: validEndedAt,
+      durationMs: validEndedAt - validStartedAt,
+      startReason: "startup",
+      endReason: "navigation",
+      dateKey: repairDateKey,
+      createdAt: validEndedAt
+    });
+
+    const impossibleSessions: UsageSession[] = [
+      {
+        id: "impossible-private-hour-a",
+        domain: "private.example",
+        windowScope: "private",
+        usageMode: "active",
+        startedAt: bucketStartedAt,
+        endedAt: bucketStartedAt + 60 * 60 * 1000,
+        durationMs: 60 * 60 * 1000,
+        startReason: "startup",
+        endReason: "navigation",
+        dateKey: repairDateKey,
+        createdAt: repairNow
+      },
+      {
+        id: "impossible-private-hour-b",
+        domain: "private.example",
+        windowScope: "private",
+        usageMode: "active",
+        startedAt: bucketStartedAt + 10 * 60 * 1000,
+        endedAt: bucketStartedAt + 50 * 60 * 1000,
+        durationMs: 40 * 60 * 1000,
+        startReason: "startup",
+        endReason: "navigation",
+        dateKey: repairDateKey,
+        createdAt: repairNow
+      },
+      {
+        id: "impossible-private-hour-c",
+        domain: "private.example",
+        windowScope: "private",
+        usageMode: "active",
+        startedAt: bucketStartedAt + 20 * 60 * 1000,
+        endedAt: bucketStartedAt + 40 * 60 * 1000,
+        durationMs: 20 * 60 * 1000,
+        startReason: "startup",
+        endReason: "navigation",
+        dateKey: repairDateKey,
+        createdAt: repairNow
+      }
+    ];
+
+    for (const session of impossibleSessions) {
+      await sessionRepository.add(session);
+    }
+
+    await dailyUsageRepository.addDuration(
+      repairDateKey,
+      "github.com",
+      5 * 60 * 60 * 1000,
+      9,
+      repairNow,
+      "regular"
+    );
+    await dailyUsageRepository.addDuration(
+      repairDateKey,
+      "private.example",
+      2 * 60 * 60 * 1000,
+      3,
+      repairNow,
+      "private"
+    );
+
+    const result = await service.repairUsageData();
+
+    expect(result.removedSessions).toBe(3);
+    const sessions = await sessionRepository.listAll();
+    expect(sessions.some((session) => session.id === "valid-session-before-impossible-hour")).toBe(
+      true
+    );
+    expect(sessions.some((session) => session.id.startsWith("impossible-private-hour-"))).toBe(
+      false
+    );
+    expect(await dailyUsageRepository.listByDate(repairDateKey, "regular")).toContainEqual(
+      expect.objectContaining({
+        domain: "github.com",
+        durationMs: 30 * 60 * 1000,
+        sessionCount: 1
+      })
+    );
+    expect(await dailyUsageRepository.listByDate(repairDateKey, "private")).toHaveLength(0);
+  });
+
+  it("rebuilds stale daily usage even when no sessions need removal", async () => {
+    const storage = new MemoryStorageArea() as unknown as browser.storage.StorageArea;
+    const settingsStore = new SettingsStore(storage);
+    const runtimeStateStore = new RuntimeStateStore(storage);
+    const visionSettingsStore = new VisionSettingsStore(storage);
+    const sessionRepository = new SessionRepository();
+    const dailyUsageRepository = new DailyUsageRepository();
+    const repairDateKey = "2026-07-23";
+    const repairNow = new Date(2026, 6, 23, 12, 0, 0).getTime();
+    const validStartedAt = new Date(2026, 6, 23, 11, 0, 0).getTime();
+    const validEndedAt = validStartedAt + 15 * 60 * 1000;
+    const service = new DataControlService({
+      settingsStore,
+      runtimeStateStore,
+      visionSettingsStore,
+      blockRuleManager: {
+        refreshDynamicRules: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["blockRuleManager"],
+      timeLimitManager: {
+        refresh: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["timeLimitManager"],
+      frictionRuleManager: {
+        refreshDynamicRules: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["frictionRuleManager"],
+      trackingEngine: {
+        reconcileTrackingState: vi.fn(async () => undefined)
+      } as unknown as ConstructorParameters<typeof DataControlService>[0]["trackingEngine"],
+      seedSiteCategoryCount: 0,
+      storageArea: storage,
+      now: () => repairNow
+    });
+
+    await sessionRepository.add({
+      id: "valid-session-stale-daily-only",
+      domain: "chatgpt.com",
+      windowScope: "regular",
+      usageMode: "active",
+      startedAt: validStartedAt,
+      endedAt: validEndedAt,
+      durationMs: validEndedAt - validStartedAt,
+      startReason: "startup",
+      endReason: "navigation",
+      dateKey: repairDateKey,
+      createdAt: validEndedAt
+    });
+    await dailyUsageRepository.addDuration(
+      repairDateKey,
+      "chatgpt.com",
+      7 * 60 * 60 * 1000,
+      33,
+      repairNow,
+      "regular"
+    );
+
+    const result = await service.repairUsageData();
+
+    expect(result.removedSessions).toBe(0);
+    expect(await dailyUsageRepository.listByDate(repairDateKey, "regular")).toEqual([
+      expect.objectContaining({
+        domain: "chatgpt.com",
+        durationMs: 15 * 60 * 1000,
+        sessionCount: 1
+      })
+    ]);
   });
 });

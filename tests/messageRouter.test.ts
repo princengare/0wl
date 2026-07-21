@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { routeMessage } from "@/background/messaging/messageRouter";
 import { SettingsStore } from "@/storage/SettingsStore";
 import { ALWAYS_SCHEDULE } from "@/shared/schedule";
-import type { HistorySessionView, UsageSession } from "@/shared/types";
+import type { HistorySessionView, TodaySummary, UsageSession } from "@/shared/types";
 import type { VisionRecommendation } from "@/vision/types";
 import { MemoryStorageArea } from "./helpers/memoryStorage";
 
@@ -133,6 +133,55 @@ describe("message router history", () => {
     ]);
   });
 
+  it("repairs usage before today summary and keeps legacy live scope visible", async () => {
+    const repairUsageData = vi.fn(async () => ({
+      removedSessions: 0,
+      rebuiltDailyUsageRecords: 0,
+      resetStaleRuntimeState: false
+    }));
+    const dependencies = {
+      dailyUsageRepository: {
+        listByDate: vi.fn(async () => [])
+      },
+      runtimeStateStore: {
+        get: vi.fn(async () => ({
+          status: "tracking",
+          activeTabId: 4,
+          activeWindowId: 2,
+          domain: "github.com",
+          sessionStartedAt: NOW - 10 * 60 * 1000,
+          lastTransitionAt: NOW - 10 * 60 * 1000,
+          revision: 8
+        }))
+      },
+      dataControlService: {
+        repairUsageData
+      },
+      now: () => NOW
+    } as unknown as Parameters<typeof routeMessage>[1];
+
+    const response = await routeMessage({ type: "GET_TODAY_SUMMARY" }, dependencies);
+
+    expect(response.ok).toBe(true);
+    expect(repairUsageData).toHaveBeenCalledTimes(1);
+    if (!response.ok) {
+      throw new Error(response.error);
+    }
+
+    expect(response.data as TodaySummary).toMatchObject({
+      currentDomain: "github.com",
+      currentSessionElapsedMs: 10 * 60 * 1000,
+      totalDurationMs: 10 * 60 * 1000,
+      domains: [
+        {
+          domain: "github.com",
+          durationMs: 10 * 60 * 1000,
+          sessionCount: 0
+        }
+      ]
+    });
+  });
+
   it("includes live background media sessions in history responses", async () => {
     const liveSession: UsageSession = {
       id: "runtime-youtube",
@@ -211,7 +260,7 @@ describe("message router history", () => {
     const recommendation: VisionRecommendation = {
       id: "heatmap:1:13:instagram.com",
       title: "Schedule a block around repeated attempts",
-      reason: "instagram.com attempts cluster around 13:00.",
+      reason: "instagram.com attempts cluster around 1:00 PM-2:00 PM.",
       supportingMetric: "3 attempts in this hour bucket",
       proposedAction: "Create or update a scheduled block for instagram.com.",
       strength: "high",

@@ -126,7 +126,7 @@ async function getTodaySummary({
   const liveSessionStartedAt = runtimeState.sessionStartedAt;
   const hasRegularLiveSession =
     runtimeState.status === "tracking" &&
-    runtimeState.windowScope === "regular" &&
+    normalizeWindowScope(runtimeState.windowScope) === "regular" &&
     isReasonableLiveSession(liveSessionStartedAt, now);
   const liveRows = addLiveDurationToDailyRows(
     rows,
@@ -253,6 +253,7 @@ export async function routeMessage(
 ): Promise<MessageResponse<unknown>> {
   switch (message.type) {
     case "GET_TODAY_SUMMARY":
+      await repairUsageDataIfAvailable(dependencies);
       return ok(await getTodaySummary(dependencies));
 
     case "GET_HISTORY":
