@@ -1,13 +1,7 @@
 import type { UsageSession } from "@/shared/types";
 import { formatDuration } from "@/shared/time";
-import {
-  classificationCategory,
-  sortSessionsAscending
-} from "../shared/visionTime";
-import {
-  isDistractionCategory,
-  isProductiveCategory
-} from "../classification/categoryTypes";
+import { classificationCategory, sortSessionsAscending } from "../shared/visionTime";
+import { isDistractionCategory, isProductiveCategory } from "../classification/categoryTypes";
 import type { DomainCategory, DomainClassification, PathwaySummary } from "../types";
 
 export const VISION_PATHWAY_THRESHOLDS = {
@@ -108,9 +102,7 @@ export function isFocusContextDomain(
   );
 }
 
-export function isDistractionContextDomain(
-  classification: DomainClassification | null
-): boolean {
+export function isDistractionContextDomain(classification: DomainClassification | null): boolean {
   return (
     isDistractionCategory(classification?.primaryCategory ?? null) ||
     hasSecondaryDistractionCategory(classification)
@@ -225,10 +217,7 @@ function buildOccurrence(
   distractionSession: UsageSession,
   classifications: Map<string, DomainClassification | null>
 ): PathwayOccurrence | null {
-  const focusDurationMs = contextSessions.reduce(
-    (sum, session) => sum + durationOf(session),
-    0
-  );
+  const focusDurationMs = contextSessions.reduce((sum, session) => sum + durationOf(session), 0);
   const distractionDurationMs = durationOf(distractionSession);
 
   if (
@@ -293,10 +282,7 @@ function summaryFromOccurrences(key: string, occurrences: PathwayOccurrence[]): 
     averageTimeBeforeDistractionMs: average(
       occurrences.map((occurrence) => occurrence.timeBeforeDistractionMs)
     ),
-    totalDurationMs: occurrences.reduce(
-      (sum, occurrence) => sum + occurrence.totalDurationMs,
-      0
-    ),
+    totalDurationMs: occurrences.reduce((sum, occurrence) => sum + occurrence.totalDurationMs, 0),
     confidence: strengthFor(count),
     details: [
       { label: "repeat count", value: `${count}x` },
@@ -341,8 +327,7 @@ export class DistractionPathwayDetector {
 
         if (
           boundaryBreaksPath(previous, current) ||
-          current.endedAt - startSession.startedAt >
-            VISION_PATHWAY_THRESHOLDS.maxRawChainWindowMs
+          current.endedAt - startSession.startedAt > VISION_PATHWAY_THRESHOLDS.maxRawChainWindowMs
         ) {
           break;
         }
@@ -351,12 +336,7 @@ export class DistractionPathwayDetector {
 
         if (isDistractionContextDomain(currentClassification)) {
           chain.push(current);
-          const occurrence = buildOccurrence(
-            chain,
-            contextSessions,
-            current,
-            classifications
-          );
+          const occurrence = buildOccurrence(chain, contextSessions, current, classifications);
 
           if (occurrence) {
             const key = `${occurrence.displaySegments.join("->")}`;
@@ -381,7 +361,9 @@ export class DistractionPathwayDetector {
     }
 
     return [...paths.entries()]
-      .filter(([, occurrences]) => occurrences.length >= VISION_PATHWAY_THRESHOLDS.minPathwayOccurrences)
+      .filter(
+        ([, occurrences]) => occurrences.length >= VISION_PATHWAY_THRESHOLDS.minPathwayOccurrences
+      )
       .map(([id, occurrences]) => summaryFromOccurrences(id, occurrences))
       .sort((a, b) => b.count - a.count || b.averageDiversionMs - a.averageDiversionMs)
       .slice(0, 8);

@@ -4,6 +4,23 @@ All notable changes to 0wl will be documented in this file.
 
 The project follows semantic versioning once public releases begin.
 
+## 0.1.9 - 2026-07-23
+
+- Bumped the source release target and package metadata to 0.1.9.
+- Added Local Device Sync as a local export/import workflow with sync bundles, import previews, conflict summaries, duplicate-session skipping, daily-usage rebuilds after merge, and Settings diagnostics.
+- Kept private raw browsing sessions out of sync exports by default; private aggregate data and private rules are optional.
+- Added scheduled browser-usage break rules from the Time Limits page with schedule support and regular/private window scopes.
+- Added Time Limits break setup mode with a coffee/break icon, a `Take a break after:` selector that shares normal time-limit options, configurable break duration from 1 minute to 1 hour, and `Set` action.
+- Clarified the break setup row so it reads `Take a break after: [duration], lasting for: [break duration]`.
+- Removed underlines from the break setup text labels so the dropdowns carry the terminal input styling.
+- Aligned the break setup `[Set]` action with the regular time-limit `[Limit]` action and spaced the two break phrases as readable blocks.
+- Added scheduled-break enforcement through the existing time-limit interstitial in `BREAK ACTIVE` mode, including automatic resume when a break ends and early resume after the first five minutes of longer breaks.
+- Moved popup Do Not Disturb to the `Today` row and changed it to a crescent-moon icon so break counting/enforcement can be paused without disabling normal blocks or time limits.
+- Reduced the popup Do Not Disturb crescent size again while keeping the button hit target stable.
+- Kept the popup Do Not Disturb button from increasing the spacing between `Today` and total browsing time.
+- Removed implemented migration, development, update, and release-process items from README future features, leaving automatic local same-device sync as future work.
+- Updated README, project site, and privacy documentation for the 0.1.9 source target.
+
 ## 0.1.8
 
 - Bumped the source release target and package metadata to 0.1.8.

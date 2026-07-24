@@ -29,7 +29,10 @@ function loadLocalEnv(path) {
     }
 
     const key = trimmed.slice(0, separatorIndex).trim();
-    const value = trimmed.slice(separatorIndex + 1).trim().replace(/^["']|["']$/g, "");
+    const value = trimmed
+      .slice(separatorIndex + 1)
+      .trim()
+      .replace(/^["']|["']$/g, "");
 
     if (key) {
       nextEnv[key] = value;
@@ -74,16 +77,12 @@ if (existsSync(resolve(root, metadataPath))) {
   signArgs.push("--amo-metadata", metadataPath);
 }
 
-const child = spawn(
-  "npx",
-  signArgs,
-  {
-    cwd: root,
-    env,
-    stdio: "inherit",
-    shell: process.platform === "win32"
-  }
-);
+const child = spawn("npx", signArgs, {
+  cwd: root,
+  env,
+  stdio: "inherit",
+  shell: process.platform === "win32"
+});
 
 child.on("exit", (code, signal) => {
   if (signal) {

@@ -1,4 +1,5 @@
 import type { BlockRuleManager } from "../blocking/BlockRuleManager";
+import type { ScheduledBreakManager } from "../breaks/ScheduledBreakManager";
 import type { ExtensionLifecycleManager } from "../lifecycle/ExtensionLifecycleManager";
 import type { MediaActivityTracker } from "../media/MediaActivityTracker";
 import type { TimeLimitManager } from "../timeLimits/TimeLimitManager";
@@ -22,6 +23,7 @@ interface TrackingEventHandlerDependencies {
   settingsStore: SettingsStore;
   blockRuleManager: BlockRuleManager;
   timeLimitManager: TimeLimitManager;
+  scheduledBreakManager: ScheduledBreakManager;
   visionSettingsStore: VisionSettingsStore;
   frictionRuleManager: FrictionRuleManager;
   lifecycleManager: ExtensionLifecycleManager;
@@ -40,6 +42,7 @@ export function registerTrackingEventHandlers({
   settingsStore,
   blockRuleManager,
   timeLimitManager,
+  scheduledBreakManager,
   visionSettingsStore,
   frictionRuleManager,
   lifecycleManager,
@@ -49,6 +52,7 @@ export function registerTrackingEventHandlers({
     await trackingEngine.reconcileTrackingState(reason);
     await mediaActivityTracker.reconcile(reason);
     await timeLimitManager.refresh();
+    await scheduledBreakManager.refresh();
     const settings = await settingsStore.get();
     await blockRuleManager.enforceMatchingTabs(settings);
   };
@@ -111,6 +115,7 @@ export function registerTrackingEventHandlers({
             settings.privateBrowserTrackingEnabled
           );
           await timeLimitManager.refresh();
+          await scheduledBreakManager.refresh();
           return;
         }
 
@@ -121,6 +126,7 @@ export function registerTrackingEventHandlers({
         }
 
         await timeLimitManager.handleAlarm(alarm.name);
+        await scheduledBreakManager.handleAlarm(alarm.name);
       })()
     );
   });
@@ -145,6 +151,7 @@ export function registerTrackingEventHandlers({
           );
           await mediaActivityTracker.reconcile("settings-changed");
           await timeLimitManager.refresh();
+          await scheduledBreakManager.refresh();
         }
 
         if (changes[VISION_SETTINGS_STORAGE_KEY]) {

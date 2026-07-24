@@ -72,7 +72,15 @@
               Impossible active-session rows, impossible hourly active buckets, and stale daily
               aggregates are repaired without clearing unrelated local data.
             </li>
-            <li>Dynamic block and time-limit rules are rebuilt from settings on startup.</li>
+            <li>Scheduled break settings migrate forward with no enabled break by default.</li>
+            <li>
+              Existing scheduled break rules without a saved break duration migrate to a 5-minute
+              break without changing their enabled state.
+            </li>
+            <li>
+              Dynamic block, time-limit, scheduled break, and friction rules are rebuilt from
+              settings on startup.
+            </li>
           </ul>
         </section>
 
@@ -105,6 +113,19 @@
             derived <code>daily_usage</code> aggregate from remaining valid sessions. Stale
             aggregate rows are rebuilt even when individual rows are under 24 hours. New session
             writes also refuse to persist 24-hour-plus active sessions.
+          </p>
+          <p>
+            Version 0.1.9 adds scheduled break settings and runtime state without changing the
+            IndexedDB database name or object stores. Existing settings migrate forward with
+            <code>scheduledBreakRules: []</code>, so breaks are not enabled until the user creates a
+            rule. Existing scheduled break rules that predate configurable break duration migrate to
+            a 5-minute break without changing their enabled state.
+          </p>
+          <p>
+            Local Device Sync import is additive by default. It previews conflicts before applying,
+            skips duplicate sessions, records source browser/extension metadata for diagnostics, and
+            rebuilds <code>daily_usage</code> from merged sessions instead of summing imported
+            aggregates.
           </p>
           <p class="muted">
             Settings, blocked sites, time limits, Vision data, and valid sessions are preserved

@@ -78,7 +78,9 @@ export class BlockEvasionDetector {
     return [...groups.entries()]
       .map(([id, occurrences]) => {
         const first = occurrences[0];
-        const rawDomains = uniqueInOrder(occurrences.flatMap((occurrence) => occurrence.rawDomains));
+        const rawDomains = uniqueInOrder(
+          occurrences.flatMap((occurrence) => occurrence.rawDomains)
+        );
         const categories = rawDomains.map(
           (domain) => classificationCategory(classifications, domain) ?? "neutral"
         );

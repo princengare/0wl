@@ -9,7 +9,7 @@ Firefox supports two update paths for permanent installations:
 
 https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
 
-The current source release target is `0.1.8`.
+The current source release target is `0.1.9`.
 
 For normal users, AMO is the recommended update path.
 
@@ -20,7 +20,7 @@ The default development manifest does not include `gecko.update_url` because a p
 Generate a starter update manifest after packaging and signing:
 
 ```sh
-UPDATE_BASE_URL="https://downloads.example.org/0wl" XPI_FILE="0wl-0.1.8.xpi" npm run updates:manifest
+UPDATE_BASE_URL="https://downloads.example.org/0wl" XPI_FILE="0wl-0.1.9.xpi" npm run updates:manifest
 ```
 
 This writes:
@@ -33,7 +33,7 @@ Host both files on HTTPS:
 
 ```text
 https://downloads.example.org/0wl/updates.json
-https://downloads.example.org/0wl/0wl-0.1.8.xpi
+https://downloads.example.org/0wl/0wl-0.1.9.xpi
 ```
 
 For a self-hosted stable build, the shipped manifest must include:

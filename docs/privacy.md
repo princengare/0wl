@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: July 20, 2026
+Last updated: July 23, 2026
 
 0wl is a local-first browser extension. Its core privacy promise is simple: browsing activity tracked by 0wl stays in the browser where 0wl is installed.
 
@@ -14,11 +14,13 @@ Last updated: July 20, 2026
 - Picture-in-Picture and background media sessions
 - blocked-site rules
 - time-limit rules
-- schedules for blocks, limits, and friction rules
+- scheduled browser break rules
+- schedules for blocks, limits, breaks, and friction rules
 - blocked-site attempt counts
 - Vision categories, events, summaries, and recommendations
 - settings and runtime recovery state
 - local backup/import metadata when you use Data Control
+- local sync device ID, sync diagnostics metadata, and sync metadata when you use Local Device Sync
 
 This data is stored with browser-local extension storage such as IndexedDB and `browser.storage.local`.
 
@@ -49,6 +51,7 @@ This data is stored with browser-local extension storage such as IndexedDB and `
 - advertising trackers
 - user accounts
 - cloud sync
+- hidden cross-browser sync
 - a backend database
 - an AI or LLM API
 
@@ -92,6 +95,10 @@ You can:
 
 Exported backup files may contain sensitive browsing patterns. Keep them private and do not commit them to GitHub.
 
+Local Device Sync in `0.1.9` is export/import based. 0wl can create a local sync bundle that you move to another browser on the same device, preview before applying, merge only after confirmation, and show diagnostics for the current browser, extension ID, duplicate-session prevention, conflict review, and known limitations. Sync bundles and diagnostics do not go to 0wl servers because there are no 0wl servers.
+
+By default, sync bundles exclude private/incognito data. If you explicitly choose to include private data, 0wl includes private aggregate usage and private rules where available, but does not export private raw browsing sessions.
+
 0wl may also run a local repair pass for impossible usage rows caused by stale runtime state. This repair stays in your browser, removes mathematically invalid active sessions, 24-hour-plus active sessions, or completed active-session rows that make a one-hour bucket physically exceed one hour, refuses to write new 24-hour-plus active sessions, and rebuilds derived daily aggregates from remaining valid completed sessions.
 
 Normal Vision reports use regular-window sessions, transitions, blocked attempts, and block rules only. Private-window browsing and private-window blocked sites are not shown in normal Vision block outcomes or recommendations.
@@ -110,7 +117,7 @@ The site links to external services such as Mozilla Add-ons and GitHub, which ha
 
 0wl uses local migrations when the extension changes its data model. The goal is to preserve existing sessions, settings, blocked sites, time limits, schedules, and Vision data across updates whenever technically possible.
 
-Version `0.1.8` keeps the same database name and stores while preserving the local aggregate index and keeping the usage repair described above active before Today and History reads.
+Version `0.1.9` keeps the same database name and stores while adding scheduled break settings, scheduled break runtime state with break start/end timing, configurable break duration, and local sync diagnostics metadata in `browser.storage.local`. Local sync merges rebuild derived `daily_usage` from sessions to prevent double-counted aggregates.
 
 ## Open Source
 

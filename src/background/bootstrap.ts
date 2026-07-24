@@ -1,5 +1,6 @@
 import { BlockAttemptRecorder } from "./blocking/BlockAttemptRecorder";
 import { BlockRuleManager } from "./blocking/BlockRuleManager";
+import { ScheduledBreakManager } from "./breaks/ScheduledBreakManager";
 import { DataControlService } from "./dataControl/DataControlService";
 import { ExtensionLifecycleManager } from "./lifecycle/ExtensionLifecycleManager";
 import { registerMessageRouter } from "./messaging/messageRouter";
@@ -17,6 +18,7 @@ import { SessionRepository } from "@/db/repositories/SessionRepository";
 import { LifecycleStore } from "@/storage/LifecycleStore";
 import { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import { SettingsStore } from "@/storage/SettingsStore";
+import { LocalDeviceSyncService } from "@/sync/LocalDeviceSyncService";
 import { browser } from "@/shared/browser";
 import { setIdleDetectionInterval } from "@/platform/idleApi";
 import type { ReconcileReason } from "@/shared/types";
@@ -71,6 +73,12 @@ function createBackgroundServices() {
     timeLimitRuleManager,
     trackingEngine
   });
+  const scheduledBreakManager = new ScheduledBreakManager({
+    settingsStore,
+    runtimeStateStore,
+    sessionRepository,
+    trackingEngine
+  });
   const mediaActivityTracker = new MediaActivityTracker({
     settingsStore,
     sessionRepository,
@@ -98,6 +106,14 @@ function createBackgroundServices() {
     trackingEngine,
     seedSiteCategoryCount: domainClassifier.seedCount
   });
+  const localDeviceSyncService = new LocalDeviceSyncService({
+    settingsStore,
+    visionSettingsStore,
+    blockRuleManager,
+    timeLimitManager,
+    scheduledBreakManager,
+    frictionRuleManager
+  });
 
   return {
     settingsStore,
@@ -113,6 +129,7 @@ function createBackgroundServices() {
     intentPromptManager,
     visionReportService,
     dataControlService,
+    localDeviceSyncService,
     blockRuleManager,
     timeLimitRuleManager,
     frictionRuleManager,
@@ -122,6 +139,7 @@ function createBackgroundServices() {
     mediaActivityTracker,
     blockAttemptRecorder,
     timeLimitManager,
+    scheduledBreakManager,
     lifecycleManager
   };
 }
@@ -161,6 +179,7 @@ export async function bootstrap(reason: ReconcileReason): Promise<void> {
   await services.trackingEngine.bootstrap(reason);
   const settings = await services.settingsStore.get();
   await services.timeLimitManager.refresh();
+  await services.scheduledBreakManager.refresh();
   await services.blockRuleManager.enforceMatchingTabs(settings);
 }
 
@@ -173,6 +192,7 @@ export function registerBackgroundListeners(): void {
     blockRuleManager: services.blockRuleManager,
     mediaActivityTracker: services.mediaActivityTracker,
     timeLimitManager: services.timeLimitManager,
+    scheduledBreakManager: services.scheduledBreakManager,
     visionSettingsStore: services.visionSettingsStore,
     frictionRuleManager: services.frictionRuleManager,
     lifecycleManager: services.lifecycleManager,

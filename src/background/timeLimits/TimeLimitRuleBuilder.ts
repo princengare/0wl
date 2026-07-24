@@ -23,7 +23,9 @@ export function buildTimeLimitPageUrl(
   returnUrl?: string
 ): string {
   const url = new URL(
-    extensionBrowser.runtime.getURL(TIME_LIMIT_PAGE_PATH as Parameters<typeof extensionBrowser.runtime.getURL>[0])
+    extensionBrowser.runtime.getURL(
+      TIME_LIMIT_PAGE_PATH as Parameters<typeof extensionBrowser.runtime.getURL>[0]
+    )
   );
   const target =
     typeof limit === "string"
@@ -35,6 +37,31 @@ export function buildTimeLimitPageUrl(
 
   if (target.domain) {
     url.searchParams.set("domain", target.domain);
+  }
+
+  if (returnUrl) {
+    url.searchParams.set("returnUrl", returnUrl);
+  }
+
+  return url.toString();
+}
+
+export function buildScheduledBreakPageUrl(
+  windowScope: WindowScope,
+  breakActiveUntil: number | null,
+  returnUrl?: string
+): string {
+  const url = new URL(
+    extensionBrowser.runtime.getURL(
+      TIME_LIMIT_PAGE_PATH as Parameters<typeof extensionBrowser.runtime.getURL>[0]
+    )
+  );
+
+  url.searchParams.set("target", "break");
+  url.searchParams.set("scope", windowScope);
+
+  if (breakActiveUntil !== null) {
+    url.searchParams.set("breakUntil", String(breakActiveUntil));
   }
 
   if (returnUrl) {

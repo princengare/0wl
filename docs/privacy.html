@@ -27,7 +27,7 @@
             0wl is local-first. Browsing activity tracked by 0wl stays in the browser where 0wl is
             installed.
           </p>
-          <p class="muted">Last updated: July 20, 2026</p>
+          <p class="muted">Last updated: July 23, 2026</p>
         </section>
 
         <section class="section stack">
@@ -40,11 +40,16 @@
             <li>Picture-in-Picture and background media sessions</li>
             <li>blocked-site rules</li>
             <li>time-limit rules</li>
-            <li>schedules for blocks, limits, and friction rules</li>
+            <li>scheduled browser break rules</li>
+            <li>schedules for blocks, limits, breaks, and friction rules</li>
             <li>blocked-site attempt counts</li>
             <li>Vision categories, events, summaries, and recommendations</li>
             <li>settings and runtime recovery state</li>
             <li>local backup/import metadata when you use Data Control</li>
+            <li>
+              local sync device ID, sync diagnostics metadata, and sync metadata when you use Local
+              Device Sync
+            </li>
           </ul>
           <p class="muted">
             This data is stored with browser-local extension storage such as IndexedDB and
@@ -89,6 +94,8 @@
             <span>user accounts</span>
             <span>none</span>
             <span>cloud sync</span>
+            <span>none</span>
+            <span>hidden cross-browser sync</span>
             <span>none</span>
             <span>backend database</span>
             <span>none</span>
@@ -153,6 +160,18 @@
             not commit them to GitHub.
           </p>
           <p>
+            Local Device Sync in version 0.1.9 is export/import based. 0wl can create a local sync
+            bundle that you move to another browser on the same device, preview before applying,
+            merge only after confirmation, and show diagnostics for the current browser, extension
+            ID, duplicate-session prevention, conflict review, and known limitations. Sync bundles
+            and diagnostics do not go to 0wl servers because there are no 0wl servers.
+          </p>
+          <p class="muted">
+            By default, sync bundles exclude private/incognito data. If you explicitly choose to
+            include private data, 0wl includes private aggregate usage and private rules where
+            available, but does not export private raw browsing sessions.
+          </p>
+          <p>
             0wl may also run a local repair pass for impossible usage rows caused by stale runtime
             state. This repair stays in your browser, removes mathematically invalid active
             sessions, 24-hour-plus active sessions, or completed active-session rows that make a
@@ -191,8 +210,11 @@
             data across updates whenever technically possible.
           </p>
           <p class="muted">
-            Version 0.1.8 keeps the same database name and stores while preserving the local
-            aggregate index and keeping local usage repair active before Today and History reads.
+            Version 0.1.9 keeps the same database name and stores while adding scheduled break
+            settings, scheduled break runtime state with break start/end timing, configurable break
+            duration, and local sync diagnostics metadata in <code>browser.storage.local</code>.
+            Local sync merges rebuild derived <code>daily_usage</code> from sessions to prevent
+            double-counted aggregates.
           </p>
         </section>
 

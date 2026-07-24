@@ -41,6 +41,7 @@ Current protections:
 - repairs legacy schema-1 settings that predate time limits
 - migrates existing blocked sites to `Always active` schedules
 - migrates existing time limits to `Always active` schedules
+- migrates existing scheduled break rules without a break duration to a 5-minute break
 - normalizes stored domains
 - removes malformed blocked-domain and time-limit rows
 - clears invalid idle-threshold values back to the default
@@ -81,6 +82,8 @@ Data Control can:
 
 Version `0.1.8` keeps automatic usage-data repair active on startup and before Today/History reads. 0wl can remove impossible active sessions that are 24 hours or longer, mathematically inconsistent, or part of an impossible overlapping one-hour active bucket, reset stale live runtime state without awarding phantom time, and rebuild the derived `daily_usage` aggregate from remaining valid sessions. Stale aggregate rows are rebuilt even when individual rows are under 24 hours. New session writes also refuse to persist 24-hour-plus active sessions. Settings, blocked sites, time limits, Vision data, and valid sessions are preserved wherever the corrupted rows can be isolated.
 
+Version `0.1.9` adds scheduled break settings and runtime state without changing the IndexedDB database name or object stores. Existing settings migrate forward with `scheduledBreakRules: []`, so breaks are not enabled until the user creates a rule. Existing scheduled break rules that predate configurable break duration migrate to a 5-minute break without changing their enabled state. Local Device Sync import is additive by default, previews conflicts before applying, skips duplicate sessions, records source browser/extension metadata for diagnostics, and rebuilds `daily_usage` from merged sessions instead of summing imported aggregates.
+
 These actions operate on local extension storage in the current browser. They do not add cloud sync, accounts, telemetry, or remote backup.
 
 ## Update Safety Rules
@@ -93,6 +96,6 @@ On update or reload:
 - repair impossible active-session rows, impossible hourly active buckets, and stale daily aggregates without clearing unrelated local data
 - re-read current browser state
 - rebuild dynamic blocking, time-limit, and friction rules
-- reschedule block, time-limit, and friction alarms from saved settings
+- reschedule block, time-limit, scheduled break, and friction alarms from saved settings
 - validate settings before use
 - start a new eligible session from the current timestamp only

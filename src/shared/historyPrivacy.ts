@@ -23,9 +23,7 @@ export function toHistorySessionView(
   return {
     id: session.id,
     domain:
-      normalizedScope === "private"
-        ? privateAggregateHistoryLabel(usageMode)
-        : session.domain,
+      normalizedScope === "private" ? privateAggregateHistoryLabel(usageMode) : session.domain,
     windowScope: normalizedScope,
     usageMode,
     aggregateOnly: normalizedScope === "private",

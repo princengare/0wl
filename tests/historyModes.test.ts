@@ -33,10 +33,7 @@ describe("history mode selection", () => {
   });
 
   it("combines private mode with Picture-in-Picture", () => {
-    const selection = toggleHistoryMode(
-      toggleHistoryMode(DEFAULT_HISTORY_MODE, "private"),
-      "pip"
-    );
+    const selection = toggleHistoryMode(toggleHistoryMode(DEFAULT_HISTORY_MODE, "private"), "pip");
 
     expect(selection).toEqual({ private: true, mediaMode: "pip" });
   });

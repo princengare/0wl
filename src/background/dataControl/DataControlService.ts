@@ -44,6 +44,7 @@ import type {
   ExtensionSettings,
   HistoryRetentionDays,
   TimeLimitedDomain,
+  ScheduledBreakRule,
   UsageDataRepairResult,
   UsageMode,
   UsageSession,
@@ -718,6 +719,10 @@ export class DataControlService {
         timeLimitedDomains: mergeByDomain<TimeLimitedDomain>(
           currentSettings.timeLimitedDomains,
           incoming.timeLimitedDomains
+        ),
+        scheduledBreakRules: mergeById<ScheduledBreakRule>(
+          currentSettings.scheduledBreakRules,
+          incoming.scheduledBreakRules ?? []
         ),
         ignoredDomains: [
           ...new Set([...currentSettings.ignoredDomains, ...incoming.ignoredDomains])

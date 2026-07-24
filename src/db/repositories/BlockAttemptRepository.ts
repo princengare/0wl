@@ -6,7 +6,9 @@ import type { BlockAttempt, WindowScope } from "@/shared/types";
 
 function attemptId(domain: string, now: number, windowScope: WindowScope): string {
   const bucket = minuteBucketKey(now);
-  return windowScope === "regular" ? `${domain}::${bucket}` : `${domain}::${windowScope}::${bucket}`;
+  return windowScope === "regular"
+    ? `${domain}::${bucket}`
+    : `${domain}::${windowScope}::${bucket}`;
 }
 
 function normalizeAttempt(attempt: BlockAttempt): BlockAttempt {

@@ -182,7 +182,15 @@ export class TrackingEngine {
 
     const inactiveStatus = desired.status === "tracking" ? "inactive" : desired.status;
     await this.dependencies.runtimeStateStore.set(
-      makeInactiveState(previous, inactiveStatus, now, activeTabId, activeWindowId, domain, windowScope)
+      makeInactiveState(
+        previous,
+        inactiveStatus,
+        now,
+        activeTabId,
+        activeWindowId,
+        domain,
+        windowScope
+      )
     );
     await this.dependencies.runtimeStateStore.setSessionStartReason(null);
   }

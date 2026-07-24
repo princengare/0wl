@@ -29,17 +29,17 @@
           <p class="summary">
             0wl is a standalone local-first extension for tracking active website time, blocking
             distracting domains, scheduling blocks and limits, and reviewing terminal-style history
-            charts, local behavioral insights, scheduled friction, and local data controls. Version
-            0.1.8 hardens update safety, repairs impossible zero-limit/private tracking artifacts,
-            removes impossible overlapping History buckets, restores regular-window live History and
-            Today visibility, and keeps blocked/time-limit interstitials inside one viewport from
-            one shared codebase. No accounts. No backend. No cloud sync.
+            charts, local behavioral insights, scheduled friction, local data controls, scheduled
+            browser breaks, and local export/import browser sync. Version 0.1.9 adds Time Limits
+            break setup mode, configurable break duration, early break resume after five minutes,
+            smaller popup crescent-moon Do Not Disturb for scheduled breaks, and sync diagnostics
+            that verify the local export/import path without accounts, telemetry, or cloud sync.
           </p>
           <div class="actions">
             <a class="button" href="https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/"
               >install from firefox add-ons</a
             >
-            <span class="muted">source target: 0.1.8 / approved on AMO: 0.1.8</span>
+            <span class="muted">source target: 0.1.9 / approved on AMO: 0.1.8</span>
           </div>
         </section>
 
@@ -116,6 +116,30 @@
                 >Today and History reads repair stale usage before charting, impossible overlapping
                 hourly buckets are removed, regular live tracking no longer appears inactive, and
                 blocked/limit interstitials fit in one viewport with their footer.</span
+              >
+            </div>
+            <div class="card">
+              <span>0.1.9 scheduled breaks</span>
+              <span class="muted"
+                >Time Limits now has a break setup row that reads
+                <code>Take a break after: [duration], lasting for: [break duration]</code>, normal
+                time-limit threshold options, plain text labels, configurable 1 minute to 1 hour
+                break duration, a `[Set]` action aligned with `[Limit]`, and early resume after five
+                minutes.</span
+              >
+            </div>
+            <div class="card">
+              <span>0.1.9 local sync</span>
+              <span class="muted"
+                >Data Control can export, preview, merge, and check local sync bundles for moving
+                0wl data between browsers on the same device.</span
+              >
+            </div>
+            <div class="card">
+              <span>popup dnd</span>
+              <span class="muted"
+                >The popup shows a smaller right-aligned crescent-moon Do Not Disturb control on the
+                Today row without increasing the spacing above total browsing time.</span
               >
             </div>
             <div class="card">
@@ -238,10 +262,10 @@
               >
             </div>
             <div class="card">
-              <span>future local sync</span>
+              <span>future automatic local sync</span>
               <span class="muted"
-                >A future milestone is local-device syncing across the browsers installed on the
-                same computer without accounts or cloud sync.</span
+                >A future milestone is automatic same-device syncing through a local companion,
+                still without accounts or cloud sync.</span
               >
             </div>
           </div>
@@ -267,14 +291,16 @@
             <span>AMO release</span>
             <span>approved 0.1.8</span>
             <span>source target</span>
-            <span>0.1.8</span>
+            <span>0.1.9</span>
             <span>vision insights</span>
             <span>roadmap outputs visible and applyable</span>
             <span>data control</span>
             <span
-              >local backups, confirmed cleanup, and a left-aligned terminal-style privacy
-              link</span
+              >local backups, sync bundles, sync diagnostics, conflict previews, confirmed cleanup,
+              and privacy links</span
             >
+            <span>scheduled breaks</span>
+            <span>configurable duration, early resume, and popup crescent-moon Do Not Disturb</span>
             <span>WXT builds</span>
             <span>firefox chrome edge opera safari</span>
           </div>

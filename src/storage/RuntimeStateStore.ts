@@ -22,7 +22,10 @@ function isPersistedTrackingState(value: unknown): value is PersistedTrackingSta
     (typeof value.activeTabId === "number" || value.activeTabId === null) &&
     (typeof value.activeWindowId === "number" || value.activeWindowId === null) &&
     (typeof value.domain === "string" || value.domain === null) &&
-    (value.windowScope === "regular" || value.windowScope === "private" || value.windowScope === null || value.windowScope === undefined) &&
+    (value.windowScope === "regular" ||
+      value.windowScope === "private" ||
+      value.windowScope === null ||
+      value.windowScope === undefined) &&
     (typeof value.sessionStartedAt === "number" || value.sessionStartedAt === null) &&
     typeof value.lastTransitionAt === "number" &&
     typeof value.revision === "number"

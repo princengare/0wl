@@ -24,7 +24,9 @@ export function isManagedRuleId(ruleId: number): boolean {
 
 export function buildBlockedPageUrl(domain: string, windowScope: WindowScope = "regular"): string {
   const url = new URL(
-    extensionBrowser.runtime.getURL(BLOCKED_PAGE_PATH as Parameters<typeof extensionBrowser.runtime.getURL>[0])
+    extensionBrowser.runtime.getURL(
+      BLOCKED_PAGE_PATH as Parameters<typeof extensionBrowser.runtime.getURL>[0]
+    )
   );
   url.searchParams.set("domain", domain);
   url.searchParams.set("scope", windowScope);

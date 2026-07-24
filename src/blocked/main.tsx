@@ -15,7 +15,9 @@ function BlockedPage(): React.JSX.Element {
   useEffect(() => {
     let mounted = true;
     const queryDomain = new URLSearchParams(window.location.search).get("domain") ?? "";
-    const queryScope = normalizeWindowScope(new URLSearchParams(window.location.search).get("scope"));
+    const queryScope = normalizeWindowScope(
+      new URLSearchParams(window.location.search).get("scope")
+    );
     const normalizedDomain = tryNormalizeDomain(queryDomain);
 
     if (normalizedDomain && mounted) {

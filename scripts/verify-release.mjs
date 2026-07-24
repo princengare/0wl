@@ -146,10 +146,7 @@ if (failures.length === 0) {
 
   for (const scriptPath of listOutputJavaScriptFiles()) {
     const script = readFileSync(scriptPath, "utf8");
-    assert(
-      !/\binnerHTML\s*=/.test(script),
-      `Unsafe innerHTML assignment found in ${scriptPath}.`
-    );
+    assert(!/\binnerHTML\s*=/.test(script), `Unsafe innerHTML assignment found in ${scriptPath}.`);
   }
 }
 

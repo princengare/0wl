@@ -6,7 +6,7 @@
 
 Current approved version: `0.1.8`
 
-Current source release target: `0.1.8`
+Current source release target: `0.1.9`
 
 Install from Firefox Add-ons:
 

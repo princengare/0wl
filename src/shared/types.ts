@@ -106,6 +106,17 @@ export interface TimeLimitedDomain {
   bypassUntil: number | null;
 }
 
+export interface ScheduledBreakRule {
+  id: string;
+  enabled: boolean;
+  windowScope: WindowScope;
+  breakAfterMinutes: number;
+  breakDurationMinutes: number;
+  schedule: ScheduleConfig;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type HistoryRetentionDays = 30 | 90 | 180 | 365 | null;
 
 export interface ExtensionSettings {
@@ -115,6 +126,7 @@ export interface ExtensionSettings {
   idleThresholdSeconds: number;
   blockedDomains: BlockedDomain[];
   timeLimitedDomains: TimeLimitedDomain[];
+  scheduledBreakRules: ScheduledBreakRule[];
   ignoredDomains: string[];
   showBlockedAttemptCount: boolean;
   historyRetentionDays: HistoryRetentionDays;
@@ -274,6 +286,42 @@ export interface UsageDataRepairResult {
   resetStaleRuntimeState: boolean;
 }
 
+export type ScheduledBreakStatusValue = "inactive" | "counting" | "break-active" | "dnd";
+
+export interface ScheduledBreakRuntimeEntry {
+  ruleId: string;
+  windowScope: WindowScope;
+  status: ScheduledBreakStatusValue;
+  cycleStartedAt: number;
+  carriedMs: number;
+  breakStartedAt: number | null;
+  breakActiveUntil: number | null;
+  dndEnabled: boolean;
+  dndStartedAt: number | null;
+  updatedAt: number;
+}
+
+export interface ScheduledBreakRuntimeState {
+  schemaVersion: 1;
+  rules: ScheduledBreakRuntimeEntry[];
+  updatedAt: number;
+  revision: number;
+}
+
+export interface ScheduledBreakStatus {
+  visible: boolean;
+  dndEnabled: boolean;
+  breakActive: boolean;
+  breakActiveUntil: number | null;
+  ruleCount: number;
+  activeRuleLabel: string | null;
+  remainingBreakMs: number;
+  nextBreakAfterMs: number | null;
+  breakStartedAt: number | null;
+  canEndBreak: boolean;
+  canEndBreakAt: number | null;
+}
+
 export type DataImportMode = "merge" | "replace";
 
 export type DataDeleteTarget =
@@ -305,6 +353,99 @@ export interface DataBackup {
 export interface DataExportResult {
   fileName: string;
   backup: DataBackup;
+}
+
+export type SyncBrowserTarget = "firefox" | "chrome" | "edge" | "opera" | "safari" | "unknown";
+
+export interface SyncBundle {
+  app: "0wl";
+  schemaVersion: 1;
+  exportedAt: number;
+  version: string;
+  sourceBrowser: SyncBrowserTarget;
+  sourceExtensionId?: string;
+  sourceDeviceId?: string;
+  includesPrivateData: boolean;
+  data: {
+    sessions: UsageSession[];
+    dailyUsage: DailyUsage[];
+    blockAttempts: BlockAttempt[];
+    blockedSites: BlockedDomain[];
+    timeLimits: TimeLimitedDomain[];
+    scheduledBreakRules: ScheduledBreakRule[];
+    frictionRules: VisionSettings["frictionRules"];
+    visionSettings: VisionSettings | null;
+    siteCategories: unknown[];
+    settingsSubset?: Partial<ExtensionSettings>;
+  };
+  checksum?: string;
+}
+
+export interface SyncConflict {
+  id: string;
+  type:
+    | "blocked-site"
+    | "time-limit"
+    | "scheduled-break"
+    | "friction-rule"
+    | "site-category"
+    | "vision-settings";
+  label: string;
+  currentSummary: string;
+  importedSummary: string;
+}
+
+export interface SyncImportPreview {
+  valid: boolean;
+  sourceBrowser: SyncBrowserTarget;
+  sourceExtensionId?: string;
+  exportedAt: number;
+  includesPrivateData: boolean;
+  sessionsToAdd: number;
+  duplicateSessionsSkipped: number;
+  blockAttemptsToAdd: number;
+  blockedSitesToAdd: number;
+  blockedSitesToUpdate: number;
+  timeLimitsToAdd: number;
+  timeLimitsToUpdate: number;
+  scheduledBreaksToAdd: number;
+  scheduledBreaksToUpdate: number;
+  frictionRulesToAdd: number;
+  frictionRulesToUpdate: number;
+  siteCategoriesToAdd: number;
+  siteCategoriesToUpdate: number;
+  visionSettingsToMerge: boolean;
+  conflicts: SyncConflict[];
+}
+
+export interface SyncExportResult {
+  fileName: string;
+  bundle: SyncBundle;
+}
+
+export type SyncConflictResolution = "keep-current" | "use-imported" | "skip";
+
+export interface SyncImportResult extends SyncImportPreview {
+  applied: boolean;
+  rebuiltDailyUsageRecords: number;
+}
+
+export interface SyncDiagnostics {
+  currentBrowser: SyncBrowserTarget;
+  extensionId: string | null;
+  syncMethod: "export-import";
+  sourceBrowserRecorded: boolean;
+  sourceExtensionIdRecorded: boolean;
+  exportAvailable: boolean;
+  importPreviewAvailable: boolean;
+  duplicatePrevention: "enabled";
+  conflictReview: "enabled";
+  privateDataDefaultExcluded: boolean;
+  lastExportAt: number | null;
+  lastImportAt: number | null;
+  lastImportSourceBrowser: SyncBrowserTarget | null;
+  lastImportSourceExtensionId: string | null;
+  limitations: string[];
 }
 
 export type MessageRequest =
@@ -354,6 +495,26 @@ export type MessageRequest =
       schedule?: ScheduleConfig;
       windowScope?: WindowScope;
     }
+  | {
+      type: "ADD_SCHEDULED_BREAK_RULE";
+      breakAfterMinutes: number;
+      breakDurationMinutes?: number;
+      schedule?: ScheduleConfig;
+      windowScope?: WindowScope;
+    }
+  | { type: "REMOVE_SCHEDULED_BREAK_RULE"; id: string }
+  | { type: "SET_SCHEDULED_BREAK_RULE_ENABLED"; id: string; enabled: boolean }
+  | {
+      type: "UPDATE_SCHEDULED_BREAK_RULE";
+      id: string;
+      breakAfterMinutes: number;
+      breakDurationMinutes: number;
+      schedule?: ScheduleConfig;
+      windowScope?: WindowScope;
+    }
+  | { type: "GET_SCHEDULED_BREAK_STATUS"; windowScope?: WindowScope }
+  | { type: "SET_SCHEDULED_BREAK_DND"; enabled: boolean; windowScope?: WindowScope }
+  | { type: "END_SCHEDULED_BREAK"; windowScope?: WindowScope }
   | { type: "REMOVE_TIME_LIMITED_DOMAIN"; id: string }
   | { type: "SET_TIME_LIMITED_DOMAIN_ENABLED"; id: string; enabled: boolean }
   | {
@@ -405,6 +566,14 @@ export type MessageRequest =
   | { type: "GET_DATA_CONTROL_STATUS" }
   | { type: "EXPORT_ALL_DATA" }
   | { type: "IMPORT_DATA_BACKUP"; backup: DataBackup; mode: DataImportMode }
+  | { type: "EXPORT_LOCAL_SYNC_BUNDLE"; includePrivateData?: boolean }
+  | { type: "PREVIEW_LOCAL_SYNC_IMPORT"; bundle: SyncBundle }
+  | { type: "GET_LOCAL_SYNC_DIAGNOSTICS" }
+  | {
+      type: "APPLY_LOCAL_SYNC_IMPORT";
+      bundle: SyncBundle;
+      conflictResolution: SyncConflictResolution;
+    }
   | { type: "SET_HISTORY_RETENTION"; historyRetentionDays: HistoryRetentionDays }
   | { type: "DELETE_LOCAL_DATA"; target: DataDeleteTarget }
   | { type: "CLEAR_PRIVATE_BROWSING_DATA" }

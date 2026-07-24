@@ -1,5 +1,6 @@
 import type { BlockRuleManager } from "../blocking/BlockRuleManager";
 import type { BlockAttemptRecorder } from "../blocking/BlockAttemptRecorder";
+import type { ScheduledBreakManager } from "../breaks/ScheduledBreakManager";
 import type { DataControlService } from "../dataControl/DataControlService";
 import type { MediaActivityTracker } from "../media/MediaActivityTracker";
 import type { TimeLimitManager } from "../timeLimits/TimeLimitManager";
@@ -9,6 +10,7 @@ import type { DailyUsageRepository } from "@/db/repositories/DailyUsageRepositor
 import type { SessionRepository } from "@/db/repositories/SessionRepository";
 import type { RuntimeStateStore } from "@/storage/RuntimeStateStore";
 import type { SettingsStore } from "@/storage/SettingsStore";
+import type { LocalDeviceSyncService } from "@/sync/LocalDeviceSyncService";
 import { browser } from "@/shared/browser";
 import { MAX_REASONABLE_ACTIVE_SESSION_DURATION_MS } from "@/shared/constants";
 import { setIdleDetectionInterval } from "@/platform/idleApi";
@@ -46,6 +48,7 @@ interface MessageRouterDependencies {
   blockAttemptRecorder: BlockAttemptRecorder;
   blockRuleManager: BlockRuleManager;
   timeLimitManager: TimeLimitManager;
+  scheduledBreakManager: ScheduledBreakManager;
   trackingEngine: TrackingEngine;
   mediaActivityTracker: MediaActivityTracker;
   domainClassifier: DomainClassifier;
@@ -54,6 +57,7 @@ interface MessageRouterDependencies {
   intentPromptManager: IntentPromptManager;
   visionReportService: VisionReportService;
   dataControlService: DataControlService;
+  localDeviceSyncService: LocalDeviceSyncService;
   now?: () => number;
 }
 
@@ -244,6 +248,7 @@ async function syncSettingsSideEffects(
     settings.trackingEnabled ? "settings-changed" : "tracking-disabled"
   );
   await dependencies.timeLimitManager.refresh();
+  await dependencies.scheduledBreakManager.refresh();
 }
 
 export async function routeMessage(
@@ -412,6 +417,65 @@ export async function routeMessage(
       });
       return ok(settings);
     }
+
+    case "ADD_SCHEDULED_BREAK_RULE": {
+      await dependencies.settingsStore.addScheduledBreakRule(
+        message.breakAfterMinutes,
+        dependencies.now?.() ?? Date.now(),
+        message.schedule,
+        message.windowScope,
+        message.breakDurationMinutes
+      );
+      const settings = await dependencies.settingsStore.get();
+      await dependencies.scheduledBreakManager.refresh();
+      return ok(settings);
+    }
+
+    case "REMOVE_SCHEDULED_BREAK_RULE": {
+      await dependencies.settingsStore.removeScheduledBreakRule(
+        message.id,
+        dependencies.now?.() ?? Date.now()
+      );
+      const settings = await dependencies.settingsStore.get();
+      await dependencies.scheduledBreakManager.refresh();
+      return ok(settings);
+    }
+
+    case "SET_SCHEDULED_BREAK_RULE_ENABLED": {
+      await dependencies.settingsStore.setScheduledBreakRuleEnabled(
+        message.id,
+        message.enabled,
+        dependencies.now?.() ?? Date.now()
+      );
+      const settings = await dependencies.settingsStore.get();
+      await dependencies.scheduledBreakManager.refresh();
+      return ok(settings);
+    }
+
+    case "UPDATE_SCHEDULED_BREAK_RULE": {
+      await dependencies.settingsStore.updateScheduledBreakRule(
+        message.id,
+        message.breakAfterMinutes,
+        message.schedule,
+        dependencies.now?.() ?? Date.now(),
+        message.windowScope,
+        message.breakDurationMinutes
+      );
+      const settings = await dependencies.settingsStore.get();
+      await dependencies.scheduledBreakManager.refresh();
+      return ok(settings);
+    }
+
+    case "GET_SCHEDULED_BREAK_STATUS":
+      return ok(await dependencies.scheduledBreakManager.getStatus(message.windowScope));
+
+    case "SET_SCHEDULED_BREAK_DND":
+      return ok(
+        await dependencies.scheduledBreakManager.setDnd(message.enabled, message.windowScope)
+      );
+
+    case "END_SCHEDULED_BREAK":
+      return ok(await dependencies.scheduledBreakManager.endActiveBreak(message.windowScope));
 
     case "REMOVE_TIME_LIMITED_DOMAIN": {
       await dependencies.settingsStore.removeTimeLimitedDomain(
@@ -619,6 +683,25 @@ export async function routeMessage(
 
     case "IMPORT_DATA_BACKUP":
       return ok(await dependencies.dataControlService.importBackup(message.backup, message.mode));
+
+    case "EXPORT_LOCAL_SYNC_BUNDLE":
+      return ok(
+        await dependencies.localDeviceSyncService.exportBundle(message.includePrivateData ?? false)
+      );
+
+    case "PREVIEW_LOCAL_SYNC_IMPORT":
+      return ok(await dependencies.localDeviceSyncService.previewImport(message.bundle));
+
+    case "GET_LOCAL_SYNC_DIAGNOSTICS":
+      return ok(await dependencies.localDeviceSyncService.getDiagnostics());
+
+    case "APPLY_LOCAL_SYNC_IMPORT":
+      return ok(
+        await dependencies.localDeviceSyncService.applyImport(
+          message.bundle,
+          message.conflictResolution
+        )
+      );
 
     case "SET_HISTORY_RETENTION":
       return ok(

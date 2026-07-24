@@ -20,7 +20,9 @@ function safeReturnUrl(value: string | null, domain: string): string {
 
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : `https://${domain}/`;
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : `https://${domain}/`;
   } catch {
     return `https://${domain}/`;
   }

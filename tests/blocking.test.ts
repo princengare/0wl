@@ -94,8 +94,8 @@ describe("blocking", () => {
 
     expect(regular.windowScope).toBe("regular");
     expect(privateRule.windowScope).toBe("private");
-    expect((await settingsStore.getEnabledBlockedDomains(3, "regular"))).toHaveLength(1);
-    expect((await settingsStore.getEnabledBlockedDomains(3, "private"))).toHaveLength(1);
+    expect(await settingsStore.getEnabledBlockedDomains(3, "regular")).toHaveLength(1);
+    expect(await settingsStore.getEnabledBlockedDomains(3, "private")).toHaveLength(1);
   });
 
   it("edits blocked domains and rejects duplicate edits", async () => {
@@ -164,7 +164,10 @@ describe("blocking", () => {
 
     await settingsStore.addBlockedDomain("instagram.com", 1);
     const settings = await settingsStore.get(2);
-    await manager.enforceMatchingTabs(settings, { domain: "instagram.com", windowScope: "regular" });
+    await manager.enforceMatchingTabs(settings, {
+      domain: "instagram.com",
+      windowScope: "regular"
+    });
 
     expect(browserMock.tabsUpdate).toHaveBeenCalledWith(
       9,
@@ -183,7 +186,10 @@ describe("blocking", () => {
     await settingsStore.update({ privateBrowserTrackingEnabled: true }, 1);
     await settingsStore.addBlockedDomain("instagram.com", 2, ALWAYS_SCHEDULE, "private");
     const settings = await settingsStore.get(3);
-    await manager.enforceMatchingTabs(settings, { domain: "instagram.com", windowScope: "private" });
+    await manager.enforceMatchingTabs(settings, {
+      domain: "instagram.com",
+      windowScope: "private"
+    });
 
     expect(browserMock.tabsUpdate).not.toHaveBeenCalled();
   });
@@ -206,12 +212,12 @@ describe("blocking", () => {
     const browserMock = makeBrowserMock();
     const manager = new BlockRuleManager();
     const blockedDomains: BlockedDomain[] = dnrScopePair({
-        id: "1",
-        domain: "instagram.com",
-        enabled: true,
-        schedule: ALWAYS_SCHEDULE,
-        createdAt: 1
-      });
+      id: "1",
+      domain: "instagram.com",
+      enabled: true,
+      schedule: ALWAYS_SCHEDULE,
+      createdAt: 1
+    });
 
     await manager.syncDynamicRules(blockedDomains, Date.now(), true);
     expect(browserMock.rules).toHaveLength(1);
@@ -224,12 +230,12 @@ describe("blocking", () => {
     const browserMock = makeBrowserMock();
     const manager = new BlockRuleManager();
     const blockedDomains: BlockedDomain[] = dnrScopePair({
-        id: "1",
-        domain: "instagram.com",
-        enabled: true,
-        schedule: ALWAYS_SCHEDULE,
-        createdAt: 1
-      });
+      id: "1",
+      domain: "instagram.com",
+      enabled: true,
+      schedule: ALWAYS_SCHEDULE,
+      createdAt: 1
+    });
 
     await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 12, 23).getTime(), true);
     expect(browserMock.rules).toHaveLength(1);
@@ -239,17 +245,17 @@ describe("blocking", () => {
     const browserMock = makeBrowserMock();
     const manager = new BlockRuleManager();
     const blockedDomains: BlockedDomain[] = dnrScopePair({
-        id: "1",
-        domain: "reddit.com",
-        enabled: true,
-        schedule: {
-          mode: "custom",
-          daysOfWeek: WEEKDAYS,
-          startMinutes: 9 * 60,
-          endMinutes: 17 * 60
-        },
-        createdAt: 1
-      });
+      id: "1",
+      domain: "reddit.com",
+      enabled: true,
+      schedule: {
+        mode: "custom",
+        daysOfWeek: WEEKDAYS,
+        startMinutes: 9 * 60,
+        endMinutes: 17 * 60
+      },
+      createdAt: 1
+    });
 
     await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 6, 10).getTime(), true);
     expect(browserMock.rules).toHaveLength(1);
@@ -262,17 +268,17 @@ describe("blocking", () => {
     const browserMock = makeBrowserMock();
     const manager = new BlockRuleManager();
     const blockedDomains: BlockedDomain[] = dnrScopePair({
-        id: "1",
-        domain: "reddit.com",
-        enabled: true,
-        schedule: {
-          mode: "custom",
-          daysOfWeek: [1],
-          startMinutes: 22 * 60,
-          endMinutes: 7 * 60
-        },
-        createdAt: 1
-      });
+      id: "1",
+      domain: "reddit.com",
+      enabled: true,
+      schedule: {
+        mode: "custom",
+        daysOfWeek: [1],
+        startMinutes: 22 * 60,
+        endMinutes: 7 * 60
+      },
+      createdAt: 1
+    });
 
     await manager.syncDynamicRules(blockedDomains, new Date(2026, 6, 6, 23).getTime(), true);
     expect(browserMock.rules).toHaveLength(1);

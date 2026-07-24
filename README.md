@@ -8,9 +8,9 @@ Project site: https://princengare.github.io/0wl/
 
 Firefox Add-ons listing: https://addons.mozilla.org/addon/7e6f3c1073eb4e24a37d/
 
-Current codebase release: `0.1.8`
+Current codebase release: `0.1.9`
 
-Current Mozilla-approved listing: `0.1.8`
+Current Mozilla-approved listing: `0.1.9`
 
 Documentation maintenance note: after each user-facing edit, update this README, the public project site, and the privacy policy when the edit affects privacy behavior. Edits made on the same day should be grouped under the next incrementing version number.
 
@@ -29,6 +29,10 @@ Documentation maintenance note: after each user-facing edit, update this README,
 - Picture-in-Picture and background media are tracked as separate history modes where the browser exposes PiP state, and live media sessions appear in History before playback stops.
 - Privacy-policy links are available from private browsing tracking and Data Control, and the public 0wl documentation/privacy site is treated as app surface rather than browsing time.
 - Version `0.1.8` hardens zero-limit/private tracking repair, cleans impossible overlapping History buckets, keeps regular-window live tracking visible in History and Today, and makes blocked/time-limit interstitial pages fit inside one viewport with their footer.
+- Version `0.1.9` adds local export/import browser sync diagnostics, configurable scheduled browser-usage breaks, early break resume after five minutes, Time Limits break setup mode, and a smaller popup crescent-moon Do Not Disturb for scheduled breaks.
+- The popup Do Not Disturb control stays right-aligned with `Today` without increasing the spacing above total browsing time.
+- Break setup labels are plain text while the duration dropdowns keep the terminal underline/input treatment.
+- The break setup `[Set]` action aligns with the regular `[Limit]` action, while `Take a break after` and `, lasting for` read as two spaced blocks.
 - Vision reports exclude private-window browsing, blocked attempts, and private block rules from the normal Vision views.
 - These changes make the UI more consistent with the 0wl aesthetic.
 
@@ -365,6 +369,30 @@ For each time-limited site, you can:
 
 0wl enforces time limits using today’s tracked usage for the normalized domain. When the active site reaches its limit, the background schedules and responds through `browser.alarms` instead of a forever-running timer. Once a domain is over its limit, 0wl also installs a dynamic main-frame redirect rule so new navigations to that domain land on the limit page.
 
+### Scheduled Browser Breaks
+
+Use the coffee/break icon on `Time Limits` to switch into scheduled break setup mode.
+
+In break setup mode:
+
+- The website field becomes `Take a break after: [duration], lasting for: [break duration]`.
+- The action button changes from `Limit` to `Set`.
+- The same schedule editor remains available.
+- Regular and private window scopes stay separate through the incognito/private toggle.
+
+Scheduled breaks are browser-wide. Example:
+
+```text
+Take a break after: 45 min, lasting for: 10 min
+Schedule: Weekdays · 9:00 AM-5:00 PM
+```
+
+`Take a break after:` uses the same duration choices as normal time limits. Break duration is configurable from `1 min` through `1 hr`, with existing rules migrating to the default `5 min` duration.
+
+When the active-browsing threshold is reached, 0wl redirects eligible HTTP/HTTPS browser tabs to the time-limit interstitial in break mode. Idle time, browser-unfocused time, extension pages, internal browser pages, and non-HTTP(S) pages do not count toward the break threshold. Break rules are disabled by default and only start after the user creates one.
+
+The toolbar popup shows a boxed crescent-moon Do Not Disturb icon right-aligned with `Today` when an enabled scheduled break rule is currently relevant. Do Not Disturb pauses scheduled break counting and enforcement for that window scope until it is turned off. It does not disable normal blocked sites or daily time limits.
+
 ### Time Limit Page
 
 When a daily time limit is reached, the browser redirects to the extension-owned time limit page where redirect rules are supported.
@@ -377,7 +405,17 @@ The time limit page shows:
 - `Go Back`
 - `Continue Anyway`
 
-Click `Continue Anyway` to bypass the limit for 15 minutes and return to the site. The background validates that the domain currently has an active time limit before granting the bypass. Return URLs are validated and only used when they belong to the same normalized domain.
+Click `Continue Anyway` to bypass the limit for 15 minutes and return to the site. The background validates that the domain currently has an active time limit before granting the bypass. Return URLs are validated before use.
+
+When a scheduled break is active, the same interstitial shows:
+
+- `BREAK ACTIVE`
+- The affected browser scope.
+- Remaining break time when available.
+- `Go Back`
+- `Resume Browsing` after the first five minutes of a longer break.
+
+When the break timer ends, or when the user resumes after the first five minutes of a longer break, 0wl clears the active break state and returns to the original HTTP/HTTPS page when that return URL is safe. Ending one active break does not disable the scheduled break rule.
 
 ### Vision
 
@@ -507,6 +545,17 @@ Backup actions:
 - Import defaults to `Merge with existing data`.
 - `Replace existing data` requires confirmation before import.
 
+Local Device Sync actions:
+
+- `Export Sync Bundle`: downloads a local JSON sync bundle for another browser on the same device.
+- `Preview Import`: reads a selected sync bundle and shows what would be added, skipped, updated, or conflicted before anything is applied.
+- `Apply Sync Merge`: applies the previewed merge only after typed confirmation.
+- `Check Local Sync`: reports the current browser, extension ID, export/import sync method, recent import/export metadata, duplicate-session prevention, conflict-review support, and known limitations.
+- `Include private aggregate data`: optionally includes private aggregate usage and private rules, but private raw browsing sessions are not exported.
+- `Conflict handling`: choose whether conflicts keep current local values, use imported values, or skip conflicts.
+
+Local Device Sync in `0.1.9` is export/import based. Browser extension storage is sandboxed separately for Firefox, Chrome, Edge, Opera, and Safari, so 0wl does not pretend it can directly read another browser’s extension storage. Automatic same-device sync would require a local Native Messaging companion in a future version.
+
 Delete Specific Data actions:
 
 - Choose the local data category from a dropdown.
@@ -557,101 +606,120 @@ In the dashboard header, clicking `[0wl]` toggles the title into the 0wl icon. C
 
 ### User-Facing Functions
 
-| Function                               | Where                    | What it does                                                                                             |
-| -------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Automatic usage tracking               | Background               | Starts tracking eligible active website time when the browser starts or the background wakes.            |
-| Domain session switching               | Background               | Closes the previous domain session and starts a new one when the active normalized domain changes.       |
-| Same-domain continuity                 | Background               | Keeps one continuous session when navigation stays within the same normalized domain.                    |
-| Browser focus exclusion                | Background               | Stops timing when the browser loses focus and starts a new eligible session when focus returns.          |
-| Idle exclusion                         | Background               | Stops timing when the system becomes idle or locked and resumes from the active timestamp.               |
-| Startup recovery                       | Background               | Invalidates stale runtime tracking state without counting browser downtime.                              |
-| Today summary                          | Popup, Dashboard         | Shows total tracked time today and ranked domains.                                                       |
-| Current session display                | Popup                    | Shows the current tracked domain and current-session elapsed time.                                       |
-| History display                        | Dashboard                | Shows session history plus hourly and calendar-week bar charts built from raw sessions.                  |
-| History bar selection                  | Dashboard                | Shows per-site totals for selected non-empty hours or days.                                              |
-| Calendar-week average                  | Dashboard                | Shows average usage for the displayed calendar week, excluding zero-usage days.                          |
-| Terminal checkbox controls             | Dashboard                | Uses bracket-style `[ ]` and `[✓]` controls with underline hover/focus feedback.                         |
-| Terminal dropdown controls             | Dashboard                | Uses custom black-and-white dropdown menus that close after selection.                                   |
-| Bundled terminal font                  | Extension UI, Docs       | Uses bundled JetBrains Mono with `ss01` and slashed-zero OpenType features.                              |
-| Dashboard brand toggle                 | Dashboard                | Toggles `[0wl]` into the 0wl icon and remembers the local UI choice.                                     |
-| Settings/interstitial footer           | Dashboard, Pages         | Shows `0wl · icon`; the icon opens the dashboard Today view.                                             |
-| Local data status                      | Dashboard                | Shows local counts, oldest record, storage used, and site-category totals.                               |
-| Export all data                        | Dashboard                | Downloads a local JSON backup of 0wl data.                                                               |
-| Import backup                          | Dashboard, Background    | Imports a local 0wl backup by merge or confirmed replace.                                                |
-| History retention setting              | Dashboard, Background    | Stores the user's retention window and prunes older local history after confirmation.                    |
-| Delete specific data                   | Dashboard, Background    | Deletes selected local categories after confirmation.                                                    |
-| Reset all local data                   | Dashboard, Background    | Requires typed `confirm` in the dashboard before deleting all local 0wl data in this browser.            |
-| Vision pathway compression             | Dashboard                | Shows concise behavioral summaries with raw domains and metadata in expandable details.                  |
-| Add blocked domain                     | Dashboard                | Normalizes input, rejects duplicates, saves settings, and installs an active dynamic DNR redirect rule.  |
-| Schedule blocked domain                | Dashboard                | Applies blocking always or only during selected local days and times.                                    |
-| Pause/resume blocked domain            | Dashboard                | Enables or disables a saved blocked domain and syncs DNR rules.                                          |
-| Remove blocked domain                  | Dashboard                | Removes the domain from settings and removes its dynamic DNR rule.                                       |
-| Blocked navigation redirect            | Browser/DNR              | Redirects blocked main-frame navigations to `blocked.html`.                                              |
-| Block attempt recording                | Blocked page, Background | Validates the blocked domain and records a minute-bucketed local attempt.                                |
-| Block attempt count                    | Blocked page             | Shows today’s count when the setting is enabled.                                                         |
-| Add time-limited domain                | Dashboard                | Normalizes input, rejects duplicates, saves a daily limit, and refreshes enforcement.                    |
-| Schedule time-limited domain           | Dashboard                | Applies limits always or only during selected local days and times.                                      |
-| Pause/resume time-limited domain       | Dashboard                | Enables or disables a saved time limit and refreshes enforcement.                                        |
-| Update time limit                      | Dashboard                | Changes a saved domain’s daily limit and clears any active bypass.                                       |
-| Remove time-limited domain             | Dashboard                | Removes the saved limit and removes any corresponding DNR rule.                                          |
-| Time-limit redirect                    | Browser/DNR, Background  | Redirects an over-limit main-frame navigation or active tab to `limit.html`.                             |
-| Time-limit bypass                      | Limit page, Background   | Validates the domain and bypasses the daily limit for 15 minutes.                                        |
-| Vision report                          | Dashboard                | Builds local transition, pathway, context, recovery, substitution, and recommendation summaries.         |
-| Site categorization                    | Dashboard                | Uses seed classifications and user overrides to classify visited domains locally.                        |
-| Distraction pathway detection          | Dashboard                | Identifies recurring paths from focus activity into distracting sites.                                   |
-| Behavior-based recommendations         | Dashboard                | Suggests local blocks or friction based on repeated patterns.                                            |
-| Scheduled friction rules               | Dashboard, Background    | Applies pause, intent, delay, or hard-stop interventions during selected local schedule windows.         |
-| Intent prompt recording                | Friction page            | Stores local browsing intent outcomes for friction prompts.                                              |
-| Alarm-based schedule enforcement       | Background               | Schedules one-shot wakeups for block transitions, limit windows, bypass expiry, or local midnight.       |
-| Install/update lifecycle recording     | Background               | Records non-sensitive extension version, previous version, install reason, and temporary-install status. |
-| Settings migration                     | Background               | Repairs legacy or malformed local settings before syncing blocking, time-limit, and idle behavior.       |
-| Update-safe recovery                   | Background               | Invalidates stale active sessions on install/update without counting unknown browser downtime.           |
-| Release verification                   | Developer tooling        | Checks version alignment, Firefox ID, extension name, and manifest-referenced build outputs.             |
-| Automatic development reload           | Developer tooling        | Builds, watches, launches Firefox, and reloads the extension with one command.                           |
-| Self-hosted update manifest generation | Developer tooling        | Creates `web-ext-artifacts/updates.json` for signed self-hosted Firefox releases.                        |
-| Tracking enabled toggle                | Dashboard                | Enables or disables all tracking.                                                                        |
-| Idle threshold selector                | Dashboard                | Updates the browser idle detection interval where supported.                                             |
-| Attempt-count visibility toggle        | Dashboard                | Shows or hides blocked-attempt counts on the blocked page.                                               |
+| Function                               | Where                    | What it does                                                                                                      |
+| -------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Automatic usage tracking               | Background               | Starts tracking eligible active website time when the browser starts or the background wakes.                     |
+| Domain session switching               | Background               | Closes the previous domain session and starts a new one when the active normalized domain changes.                |
+| Same-domain continuity                 | Background               | Keeps one continuous session when navigation stays within the same normalized domain.                             |
+| Browser focus exclusion                | Background               | Stops timing when the browser loses focus and starts a new eligible session when focus returns.                   |
+| Idle exclusion                         | Background               | Stops timing when the system becomes idle or locked and resumes from the active timestamp.                        |
+| Startup recovery                       | Background               | Invalidates stale runtime tracking state without counting browser downtime.                                       |
+| Today summary                          | Popup, Dashboard         | Shows total tracked time today and ranked domains.                                                                |
+| Current session display                | Popup                    | Shows the current tracked domain and current-session elapsed time.                                                |
+| History display                        | Dashboard                | Shows session history plus hourly and calendar-week bar charts built from raw sessions.                           |
+| History bar selection                  | Dashboard                | Shows per-site totals for selected non-empty hours or days.                                                       |
+| Calendar-week average                  | Dashboard                | Shows average usage for the displayed calendar week, excluding zero-usage days.                                   |
+| Terminal checkbox controls             | Dashboard                | Uses bracket-style `[ ]` and `[✓]` controls with underline hover/focus feedback.                                  |
+| Terminal dropdown controls             | Dashboard                | Uses custom black-and-white dropdown menus that close after selection.                                            |
+| Bundled terminal font                  | Extension UI, Docs       | Uses bundled JetBrains Mono with `ss01` and slashed-zero OpenType features.                                       |
+| Dashboard brand toggle                 | Dashboard                | Toggles `[0wl]` into the 0wl icon and remembers the local UI choice.                                              |
+| Settings/interstitial footer           | Dashboard, Pages         | Shows `0wl · icon`; the icon opens the dashboard Today view.                                                      |
+| Local data status                      | Dashboard                | Shows local counts, oldest record, storage used, and site-category totals.                                        |
+| Export all data                        | Dashboard                | Downloads a local JSON backup of 0wl data.                                                                        |
+| Import backup                          | Dashboard, Background    | Imports a local 0wl backup by merge or confirmed replace.                                                         |
+| Export local sync bundle               | Dashboard                | Downloads a local-first sync bundle for importing into another browser on the same device.                        |
+| Preview local sync import              | Dashboard, Background    | Validates a sync bundle and shows duplicates, adds, updates, and conflicts before applying data.                  |
+| Apply local sync merge                 | Dashboard, Background    | Merges a previewed sync bundle after confirmation, skips duplicate sessions, and rebuilds daily usage.            |
+| History retention setting              | Dashboard, Background    | Stores the user's retention window and prunes older local history after confirmation.                             |
+| Delete specific data                   | Dashboard, Background    | Deletes selected local categories after confirmation.                                                             |
+| Reset all local data                   | Dashboard, Background    | Requires typed `confirm` in the dashboard before deleting all local 0wl data in this browser.                     |
+| Vision pathway compression             | Dashboard                | Shows concise behavioral summaries with raw domains and metadata in expandable details.                           |
+| Add blocked domain                     | Dashboard                | Normalizes input, rejects duplicates, saves settings, and installs an active dynamic DNR redirect rule.           |
+| Schedule blocked domain                | Dashboard                | Applies blocking always or only during selected local days and times.                                             |
+| Pause/resume blocked domain            | Dashboard                | Enables or disables a saved blocked domain and syncs DNR rules.                                                   |
+| Remove blocked domain                  | Dashboard                | Removes the domain from settings and removes its dynamic DNR rule.                                                |
+| Blocked navigation redirect            | Browser/DNR              | Redirects blocked main-frame navigations to `blocked.html`.                                                       |
+| Block attempt recording                | Blocked page, Background | Validates the blocked domain and records a minute-bucketed local attempt.                                         |
+| Block attempt count                    | Blocked page             | Shows today’s count when the setting is enabled.                                                                  |
+| Add time-limited domain                | Dashboard                | Normalizes input, rejects duplicates, saves a daily limit, and refreshes enforcement.                             |
+| Schedule time-limited domain           | Dashboard                | Applies limits always or only during selected local days and times.                                               |
+| Pause/resume time-limited domain       | Dashboard                | Enables or disables a saved time limit and refreshes enforcement.                                                 |
+| Update time limit                      | Dashboard                | Changes a saved domain’s daily limit and clears any active bypass.                                                |
+| Remove time-limited domain             | Dashboard                | Removes the saved limit and removes any corresponding DNR rule.                                                   |
+| Time-limit redirect                    | Browser/DNR, Background  | Redirects an over-limit main-frame navigation or active tab to `limit.html`.                                      |
+| Time-limit bypass                      | Limit page, Background   | Validates the domain and bypasses the daily limit for 15 minutes.                                                 |
+| Scheduled browser break setup          | Dashboard                | Creates browser-wide active-browsing break rules from the Time Limits page.                                       |
+| Scheduled break enforcement            | Background               | Counts eligible active browsing toward a break threshold and redirects tabs during the configured break.          |
+| Scheduled break early resume           | Limit page, Background   | Lets longer breaks be ended after the first five minutes without disabling the saved break rule.                  |
+| Scheduled break Do Not Disturb         | Popup, Background        | Pauses scheduled break counting and enforcement with the popup crescent-moon control.                             |
+| Local sync diagnostics                 | Dashboard, Background    | Reports the export/import sync method, browser, extension ID, duplicate checks, conflict review, and limitations. |
+| Vision report                          | Dashboard                | Builds local transition, pathway, context, recovery, substitution, and recommendation summaries.                  |
+| Site categorization                    | Dashboard                | Uses seed classifications and user overrides to classify visited domains locally.                                 |
+| Distraction pathway detection          | Dashboard                | Identifies recurring paths from focus activity into distracting sites.                                            |
+| Behavior-based recommendations         | Dashboard                | Suggests local blocks or friction based on repeated patterns.                                                     |
+| Scheduled friction rules               | Dashboard, Background    | Applies pause, intent, delay, or hard-stop interventions during selected local schedule windows.                  |
+| Intent prompt recording                | Friction page            | Stores local browsing intent outcomes for friction prompts.                                                       |
+| Alarm-based schedule enforcement       | Background               | Schedules one-shot wakeups for block transitions, limit windows, bypass expiry, or local midnight.                |
+| Install/update lifecycle recording     | Background               | Records non-sensitive extension version, previous version, install reason, and temporary-install status.          |
+| Settings migration                     | Background               | Repairs legacy or malformed local settings before syncing blocking, time-limit, and idle behavior.                |
+| Update-safe recovery                   | Background               | Invalidates stale active sessions on install/update without counting unknown browser downtime.                    |
+| Release verification                   | Developer tooling        | Checks version alignment, Firefox ID, extension name, and manifest-referenced build outputs.                      |
+| Automatic development reload           | Developer tooling        | Builds, watches, launches Firefox, and reloads the extension with one command.                                    |
+| Self-hosted update manifest generation | Developer tooling        | Creates `web-ext-artifacts/updates.json` for signed self-hosted Firefox releases.                                 |
+| Tracking enabled toggle                | Dashboard                | Enables or disables all tracking.                                                                                 |
+| Idle threshold selector                | Dashboard                | Updates the browser idle detection interval where supported.                                                      |
+| Attempt-count visibility toggle        | Dashboard                | Shows or hides blocked-attempt counts on the blocked page.                                                        |
 
 ### Runtime Messages
 
 The React pages communicate with the background through typed `browser.runtime.sendMessage` requests.
 
-| Message                           | Caller                  | Response                 | Purpose                                                                                       |
-| --------------------------------- | ----------------------- | ------------------------ | --------------------------------------------------------------------------------------------- |
-| `GET_TODAY_SUMMARY`               | Popup, Dashboard        | `TodaySummary`           | Returns today’s aggregate usage plus live current-session time.                               |
-| `GET_HISTORY`                     | Dashboard               | `HistorySessionView[]`   | Returns completed sessions for `today`, `yesterday`, or the active history range.             |
-| `GET_HISTORY_INTERVAL`            | Dashboard               | `HistorySessionView[]`   | Returns raw sessions overlapping an exact local-time interval, used for calendar weeks.       |
-| `GET_SETTINGS`                    | Dashboard, Blocked page | `ExtensionSettings`      | Returns extension settings from `browser.storage.local`.                                      |
-| `UPDATE_SETTINGS`                 | Dashboard               | `ExtensionSettings`      | Updates tracking, idle threshold, attempt-count visibility, or history retention.             |
-| `ADD_BLOCKED_DOMAIN`              | Dashboard               | `ExtensionSettings`      | Normalizes and adds a blocked domain with an optional schedule, then syncs DNR rules.         |
-| `REMOVE_BLOCKED_DOMAIN`           | Dashboard               | `ExtensionSettings`      | Removes a blocked domain and syncs DNR rules.                                                 |
-| `SET_BLOCKED_DOMAIN_ENABLED`      | Dashboard               | `ExtensionSettings`      | Enables or pauses a blocked domain and syncs DNR rules.                                       |
-| `UPDATE_BLOCKED_DOMAIN_SCHEDULE`  | Dashboard               | `ExtensionSettings`      | Updates a blocked domain schedule and resyncs active DNR rules.                               |
-| `ADD_TIME_LIMITED_DOMAIN`         | Dashboard               | `ExtensionSettings`      | Normalizes and adds a daily time limit with an optional schedule, then refreshes enforcement. |
-| `REMOVE_TIME_LIMITED_DOMAIN`      | Dashboard               | `ExtensionSettings`      | Removes a daily time limit and refreshes enforcement.                                         |
-| `SET_TIME_LIMITED_DOMAIN_ENABLED` | Dashboard               | `ExtensionSettings`      | Enables or pauses a daily time limit and refreshes enforcement.                               |
-| `UPDATE_TIME_LIMITED_DOMAIN`      | Dashboard               | `ExtensionSettings`      | Updates the daily limit or schedule for a saved domain.                                       |
-| `GET_TIME_LIMIT_STATUS`           | Limit page              | `TimeLimitStatus`        | Returns used time, remaining time, exceeded status, and bypass state.                         |
-| `BYPASS_TIME_LIMIT`               | Limit page              | `TimeLimitStatus`        | Grants a validated 15-minute bypass for an active time-limited domain.                        |
-| `GET_VISION_REPORT`               | Dashboard               | `VisionReport`           | Returns local classification, pattern, insight, recommendation, and friction summaries.       |
-| `SET_DOMAIN_CLASSIFICATION`       | Dashboard               | `VisionReport`           | Saves a local user category override for a normalized domain.                                 |
-| `RESET_DOMAIN_CLASSIFICATION`     | Dashboard               | `VisionReport`           | Removes a user override and falls back to the seed classification when available.             |
-| `UPDATE_VISION_SETTINGS`          | Dashboard               | `VisionSettings`         | Updates adaptive recommendation/enforcement settings.                                         |
-| `DISMISS_VISION_RECOMMENDATION`   | Dashboard               | `VisionReport`           | Locally hides a recommendation.                                                               |
-| `APPLY_VISION_RECOMMENDATION`     | Dashboard               | `VisionReport`           | Applies a local recommended block or friction rule.                                           |
-| `UPSERT_FRICTION_RULE`            | Dashboard               | `VisionReport`           | Creates or updates a scheduled friction rule.                                                 |
-| `REMOVE_FRICTION_RULE`            | Dashboard               | `VisionReport`           | Removes a scheduled friction rule.                                                            |
-| `RECORD_BROWSING_INTENT`          | Friction page           | `BrowsingIntent`         | Records a validated local browsing-intent outcome.                                            |
-| `GET_RUNTIME_STATE`               | Internal/debug use      | `PersistedTrackingState` | Returns current persisted runtime tracking state.                                             |
-| `GET_DATA_CONTROL_STATUS`         | Dashboard               | `DataControlStatus`      | Returns local data counts, oldest record, storage estimate, and retention setting.            |
-| `EXPORT_ALL_DATA`                 | Dashboard               | `DataExportResult`       | Returns a JSON backup payload and backup filename for local download.                         |
-| `IMPORT_DATA_BACKUP`              | Dashboard               | `DataControlStatus`      | Imports a valid 0wl backup by merge or confirmed replace.                                     |
-| `SET_HISTORY_RETENTION`           | Dashboard               | `DataControlStatus`      | Saves the retention window and prunes older local history after confirmation.                 |
-| `DELETE_LOCAL_DATA`               | Dashboard               | `DataControlStatus`      | Deletes one confirmed local data category and refreshes enforcement.                          |
-| `RESET_ALL_LOCAL_DATA`            | Dashboard               | `DataControlStatus`      | Resets all local 0wl data through a typed dashboard confirmation flow.                        |
-| `GET_BLOCKED_ATTEMPT_COUNT`       | Blocked page            | `number`                 | Returns today’s blocked-attempt count for a validated domain.                                 |
-| `RECORD_BLOCK_ATTEMPT`            | Blocked page            | `BlockAttempt`           | Validates the domain is currently blocked and records a local attempt.                        |
+| Message                            | Caller                  | Response                 | Purpose                                                                                       |
+| ---------------------------------- | ----------------------- | ------------------------ | --------------------------------------------------------------------------------------------- |
+| `GET_TODAY_SUMMARY`                | Popup, Dashboard        | `TodaySummary`           | Returns today’s aggregate usage plus live current-session time.                               |
+| `GET_HISTORY`                      | Dashboard               | `HistorySessionView[]`   | Returns completed sessions for `today`, `yesterday`, or the active history range.             |
+| `GET_HISTORY_INTERVAL`             | Dashboard               | `HistorySessionView[]`   | Returns raw sessions overlapping an exact local-time interval, used for calendar weeks.       |
+| `GET_SETTINGS`                     | Dashboard, Blocked page | `ExtensionSettings`      | Returns extension settings from `browser.storage.local`.                                      |
+| `UPDATE_SETTINGS`                  | Dashboard               | `ExtensionSettings`      | Updates tracking, idle threshold, attempt-count visibility, or history retention.             |
+| `ADD_BLOCKED_DOMAIN`               | Dashboard               | `ExtensionSettings`      | Normalizes and adds a blocked domain with an optional schedule, then syncs DNR rules.         |
+| `REMOVE_BLOCKED_DOMAIN`            | Dashboard               | `ExtensionSettings`      | Removes a blocked domain and syncs DNR rules.                                                 |
+| `SET_BLOCKED_DOMAIN_ENABLED`       | Dashboard               | `ExtensionSettings`      | Enables or pauses a blocked domain and syncs DNR rules.                                       |
+| `UPDATE_BLOCKED_DOMAIN_SCHEDULE`   | Dashboard               | `ExtensionSettings`      | Updates a blocked domain schedule and resyncs active DNR rules.                               |
+| `ADD_TIME_LIMITED_DOMAIN`          | Dashboard               | `ExtensionSettings`      | Normalizes and adds a daily time limit with an optional schedule, then refreshes enforcement. |
+| `REMOVE_TIME_LIMITED_DOMAIN`       | Dashboard               | `ExtensionSettings`      | Removes a daily time limit and refreshes enforcement.                                         |
+| `SET_TIME_LIMITED_DOMAIN_ENABLED`  | Dashboard               | `ExtensionSettings`      | Enables or pauses a daily time limit and refreshes enforcement.                               |
+| `UPDATE_TIME_LIMITED_DOMAIN`       | Dashboard               | `ExtensionSettings`      | Updates the daily limit or schedule for a saved domain.                                       |
+| `ADD_SCHEDULED_BREAK_RULE`         | Dashboard               | `ExtensionSettings`      | Adds a browser-wide scheduled break rule for the selected window scope.                       |
+| `REMOVE_SCHEDULED_BREAK_RULE`      | Dashboard               | `ExtensionSettings`      | Removes a scheduled break rule and refreshes break enforcement.                               |
+| `SET_SCHEDULED_BREAK_RULE_ENABLED` | Dashboard               | `ExtensionSettings`      | Enables or pauses a scheduled break rule.                                                     |
+| `UPDATE_SCHEDULED_BREAK_RULE`      | Dashboard               | `ExtensionSettings`      | Updates the scheduled break threshold, break duration, or schedule.                           |
+| `GET_SCHEDULED_BREAK_STATUS`       | Popup, Break page       | `ScheduledBreakStatus`   | Returns DND, break-active, and remaining-time status for scheduled breaks.                    |
+| `SET_SCHEDULED_BREAK_DND`          | Popup                   | `ScheduledBreakStatus`   | Toggles Do Not Disturb for scheduled break counting and enforcement.                          |
+| `END_SCHEDULED_BREAK`              | Break page              | `ScheduledBreakStatus`   | Ends the current active break after the five-minute early-resume window has elapsed.          |
+| `GET_TIME_LIMIT_STATUS`            | Limit page              | `TimeLimitStatus`        | Returns used time, remaining time, exceeded status, and bypass state.                         |
+| `BYPASS_TIME_LIMIT`                | Limit page              | `TimeLimitStatus`        | Grants a validated 15-minute bypass for an active time-limited domain.                        |
+| `GET_VISION_REPORT`                | Dashboard               | `VisionReport`           | Returns local classification, pattern, insight, recommendation, and friction summaries.       |
+| `SET_DOMAIN_CLASSIFICATION`        | Dashboard               | `VisionReport`           | Saves a local user category override for a normalized domain.                                 |
+| `RESET_DOMAIN_CLASSIFICATION`      | Dashboard               | `VisionReport`           | Removes a user override and falls back to the seed classification when available.             |
+| `UPDATE_VISION_SETTINGS`           | Dashboard               | `VisionSettings`         | Updates adaptive recommendation/enforcement settings.                                         |
+| `DISMISS_VISION_RECOMMENDATION`    | Dashboard               | `VisionReport`           | Locally hides a recommendation.                                                               |
+| `APPLY_VISION_RECOMMENDATION`      | Dashboard               | `VisionReport`           | Applies a local recommended block or friction rule.                                           |
+| `UPSERT_FRICTION_RULE`             | Dashboard               | `VisionReport`           | Creates or updates a scheduled friction rule.                                                 |
+| `REMOVE_FRICTION_RULE`             | Dashboard               | `VisionReport`           | Removes a scheduled friction rule.                                                            |
+| `RECORD_BROWSING_INTENT`           | Friction page           | `BrowsingIntent`         | Records a validated local browsing-intent outcome.                                            |
+| `GET_RUNTIME_STATE`                | Internal/debug use      | `PersistedTrackingState` | Returns current persisted runtime tracking state.                                             |
+| `GET_DATA_CONTROL_STATUS`          | Dashboard               | `DataControlStatus`      | Returns local data counts, oldest record, storage estimate, and retention setting.            |
+| `EXPORT_ALL_DATA`                  | Dashboard               | `DataExportResult`       | Returns a JSON backup payload and backup filename for local download.                         |
+| `IMPORT_DATA_BACKUP`               | Dashboard               | `DataControlStatus`      | Imports a valid 0wl backup by merge or confirmed replace.                                     |
+| `EXPORT_LOCAL_SYNC_BUNDLE`         | Dashboard               | `SyncExportResult`       | Creates a local cross-browser sync bundle.                                                    |
+| `PREVIEW_LOCAL_SYNC_IMPORT`        | Dashboard               | `SyncImportPreview`      | Previews sync changes and conflicts without applying them.                                    |
+| `GET_LOCAL_SYNC_DIAGNOSTICS`       | Dashboard               | `SyncDiagnostics`        | Reports local export/import sync checks and limitations.                                      |
+| `APPLY_LOCAL_SYNC_IMPORT`          | Dashboard               | `SyncImportResult`       | Applies a confirmed local sync merge and rebuilds derived daily usage.                        |
+| `SET_HISTORY_RETENTION`            | Dashboard               | `DataControlStatus`      | Saves the retention window and prunes older local history after confirmation.                 |
+| `DELETE_LOCAL_DATA`                | Dashboard               | `DataControlStatus`      | Deletes one confirmed local data category and refreshes enforcement.                          |
+| `RESET_ALL_LOCAL_DATA`             | Dashboard               | `DataControlStatus`      | Resets all local 0wl data through a typed dashboard confirmation flow.                        |
+| `GET_BLOCKED_ATTEMPT_COUNT`        | Blocked page            | `number`                 | Returns today’s blocked-attempt count for a validated domain.                                 |
+| `RECORD_BLOCK_ATTEMPT`             | Blocked page            | `BlockAttempt`           | Validates the domain is currently blocked and records a local attempt.                        |
 
 ### Tracking States
 
@@ -711,6 +779,8 @@ On startup and before Today/History reads, 0wl can repair impossible local usage
 - Current session start metadata.
 - Extension lifecycle metadata.
 - Time-limit bypass expiration timestamps.
+- Scheduled break rules and scheduled break runtime state.
+- Local sync device ID and local sync diagnostics metadata for export/import bundles.
 - Vision settings and scheduled friction rules.
 - User domain category overrides.
 
@@ -746,102 +816,23 @@ The manifest declares:
 
 ## Features to Be Added
 
-### Local Device Browser Sync
+### Automatic Local Device Sync
 
-Sync 0wl data across the browsers installed on the same local device.
+Support automatic same-device syncing across installed browsers without accounts or cloud sync.
 
-Planned capabilities:
-
-- sync Firefox, Chrome, Edge, Opera, and Safari 0wl data on one computer
-- keep the sync local to the device
-- preserve local-first privacy without accounts, telemetry, or cloud sync
-- merge sessions, daily usage, blocked sites, time limits, friction rules, Vision settings, and site categories safely
-- prevent duplicate sessions and double-counted aggregates during sync
-- let users review conflicts before overwriting local data
-- keep browser-specific extension IDs and storage constraints documented
-
-### Automatic Extension Updates
-
-Support automatic updates for permanently installed versions of the extension.
-
-Potential distribution methods:
-
-- Firefox Add-ons Marketplace updates
-- self-distributed signed releases
-- custom HTTPS update manifest for supported self-hosted releases
-
-Expected workflow:
-
-```text
-Version 0.1.0 installed
--> New version 0.1.1 released
--> Firefox detects update
--> Extension updates automatically
-```
-
-### Development and Stable Release Channels
-
-Separate experimental development builds from everyday stable builds.
-
-Development channel:
-
-- live reload
-- rapid iteration
-- test data
-- verbose logging
-- temporary or dedicated development profile
-
-Stable channel:
-
-- signed installation
-- persistent tracking
-- production settings
-- protected user data
-- automatic version updates
-
-The goal is to prevent experimental builds from corrupting real browsing history or production tracking data.
-
-### Extension Data Migration
-
-Support safe updates to local extension data as the application evolves.
+Current `0.1.9` sync is local export/import. A future automatic version would require a local Native Messaging companion or another browser-approved local mechanism.
 
 Planned capabilities:
 
-- IndexedDB schema versioning
-- migration scripts
-- backward-compatible settings updates
-- preservation of historical browsing data
-- preservation of blocked-site rules
-- rollback-safe migrations where possible
+- shared local sync store on the user's device
+- browser-specific extension ID mapping
+- Native Messaging host installation and health checks
+- conflict-safe merge behavior
+- no cloud account
+- no telemetry
+- no remote sync service
 
-### Version and Release Management
-
-Add a structured release process.
-
-Planned capabilities:
-
-- semantic versioning
-- changelog generation
-- release notes
-- packaged `.xpi` artifacts
-- signed Firefox releases
-- reproducible production builds
-- version compatibility checks
-
-Example release progression:
-
-```text
-0.1.0  Initial tracker
-0.2.0  Blocking improvements
-0.1.3  Vision insights, WXT cross-browser builds, and UI consistency with the 0wl aesthetic
-0.1.4  Mozilla-approved Settings data control, local backups, 0wl footers, and concise Vision summaries
-0.1.5  Mozilla-approved privacy links, 0wl site tracking exclusion, and separated PiP/background media refinements
-0.1.6  Approved popup-only privacy links, terminal privacy-link styling, media-bucket refinements, and zero-limit usage repair
-0.1.7  Update-safety hardening, usage-data cleanup, regular History/Today recovery, one-viewport interstitial pages, and verified Vision roadmap outputs
-0.1.8  Mozilla-approved usage-data repair hardening and Vision heatmap/recovery UI cleanup
-0.3.0  Expanded behavioral intelligence
-1.0.0  Stable public release
-```
+The goal is to keep all synced data local to the user's own machine while avoiding manual export/import steps.
 
 ## Development Commands
 

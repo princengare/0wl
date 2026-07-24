@@ -7,11 +7,15 @@ import type {
   BlockedDomain,
   ExtensionSettings,
   ScheduleConfig,
+  ScheduledBreakRule,
   TimeLimitedDomain,
   TimeLimitTargetType,
   WindowScope
 } from "@/shared/types";
-import { DEFAULT_IDLE_THRESHOLD_SECONDS } from "@/shared/constants";
+import {
+  DEFAULT_IDLE_THRESHOLD_SECONDS,
+  DEFAULT_SCHEDULED_BREAK_DURATION_MINUTES
+} from "@/shared/constants";
 import {
   isPlainObject,
   isValidHistoryRetentionDays,
@@ -43,7 +47,11 @@ function createBlockedDomainId(domain: string, now: number, existingIds: Set<str
   return `${domain}-${now}`;
 }
 
-function createTimeLimitedDomainId(targetKey: string, now: number, existingIds: Set<string>): string {
+function createTimeLimitedDomainId(
+  targetKey: string,
+  now: number,
+  existingIds: Set<string>
+): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     const id = crypto.randomUUID();
     if (!existingIds.has(id)) {
@@ -52,6 +60,21 @@ function createTimeLimitedDomainId(targetKey: string, now: number, existingIds: 
   }
 
   return `limit-${targetKey}-${now}`;
+}
+
+function createScheduledBreakRuleId(
+  windowScope: WindowScope,
+  now: number,
+  existingIds: Set<string>
+): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    const id = crypto.randomUUID();
+    if (!existingIds.has(id)) {
+      return id;
+    }
+  }
+
+  return `break-${windowScope}-${now}`;
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -79,6 +102,14 @@ function isAllowedTimeLimitMinutesForScope(
   windowScope: WindowScope
 ): limitMinutes is number {
   return isValidTimeLimitMinutes(limitMinutes) && (limitMinutes > 0 || windowScope === "private");
+}
+
+function isValidBreakAfterMinutes(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 24 * 60;
+}
+
+function isValidBreakDurationMinutes(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 60;
 }
 
 function resolveTimeLimitInput(input: string): {
@@ -249,6 +280,76 @@ function normalizeTimeLimitedDomains(value: unknown): {
   return { timeLimitedDomains, changed };
 }
 
+function normalizeScheduledBreakRules(value: unknown): {
+  scheduledBreakRules: ScheduledBreakRule[];
+  changed: boolean;
+} {
+  if (!Array.isArray(value)) {
+    return { scheduledBreakRules: [], changed: true };
+  }
+
+  const seenScopes = new Set<WindowScope>();
+  const scheduledBreakRules: ScheduledBreakRule[] = [];
+  let changed = false;
+
+  for (const candidate of value) {
+    if (
+      !isPlainObject(candidate) ||
+      typeof candidate.enabled !== "boolean" ||
+      !isFiniteNumber(candidate.createdAt)
+    ) {
+      changed = true;
+      continue;
+    }
+
+    const windowScope = normalizeWindowScope(candidate.windowScope);
+
+    if (!isValidBreakAfterMinutes(candidate.breakAfterMinutes)) {
+      changed = true;
+      continue;
+    }
+
+    const breakDurationMinutes = isValidBreakDurationMinutes(candidate.breakDurationMinutes)
+      ? candidate.breakDurationMinutes
+      : DEFAULT_SCHEDULED_BREAK_DURATION_MINUTES;
+
+    if (seenScopes.has(windowScope)) {
+      changed = true;
+      continue;
+    }
+
+    const id =
+      typeof candidate.id === "string" && candidate.id.trim().length > 0
+        ? candidate.id
+        : `break-${windowScope}-${candidate.createdAt}`;
+    const schedule = normalizeSchedule(candidate.schedule);
+    const updatedAt = isFiniteNumber(candidate.updatedAt)
+      ? candidate.updatedAt
+      : candidate.createdAt;
+
+    scheduledBreakRules.push({
+      id,
+      enabled: candidate.enabled,
+      windowScope,
+      breakAfterMinutes: candidate.breakAfterMinutes,
+      breakDurationMinutes,
+      schedule: schedule.schedule,
+      createdAt: candidate.createdAt,
+      updatedAt
+    });
+    seenScopes.add(windowScope);
+
+    changed ||=
+      id !== candidate.id ||
+      windowScope !== candidate.windowScope ||
+      breakDurationMinutes !== candidate.breakDurationMinutes ||
+      updatedAt !== candidate.updatedAt ||
+      schedule.changed;
+  }
+
+  return { scheduledBreakRules, changed };
+}
+
 function normalizeIgnoredDomains(value: unknown): {
   ignoredDomains: string[];
   changed: boolean;
@@ -300,6 +401,7 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
 
   const blocked = normalizeBlockedDomains(value.blockedDomains);
   const limited = normalizeTimeLimitedDomains(value.timeLimitedDomains);
+  const breaks = normalizeScheduledBreakRules(value.scheduledBreakRules);
   const ignored = normalizeIgnoredDomains(value.ignoredDomains);
   const trackingEnabled = typeof value.trackingEnabled === "boolean" ? value.trackingEnabled : true;
   const privateBrowserTrackingEnabled =
@@ -319,6 +421,7 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
   const changed =
     blocked.changed ||
     limited.changed ||
+    breaks.changed ||
     ignored.changed ||
     trackingEnabled !== value.trackingEnabled ||
     privateBrowserTrackingEnabled !== value.privateBrowserTrackingEnabled ||
@@ -336,6 +439,7 @@ function normalizeStoredSettings(value: unknown, now: number): NormalizedSetting
       idleThresholdSeconds,
       blockedDomains: blocked.blockedDomains,
       timeLimitedDomains: limited.timeLimitedDomains,
+      scheduledBreakRules: breaks.scheduledBreakRules,
       ignoredDomains: ignored.ignoredDomains,
       showBlockedAttemptCount,
       historyRetentionDays,
@@ -421,6 +525,138 @@ export class SettingsStore {
 
     await this.save(next);
     return next;
+  }
+
+  async addScheduledBreakRule(
+    breakAfterMinutes: number,
+    now = Date.now(),
+    scheduleInput: ScheduleConfig = ALWAYS_SCHEDULE,
+    windowScopeInput: WindowScope = "regular",
+    breakDurationMinutes = DEFAULT_SCHEDULED_BREAK_DURATION_MINUTES
+  ): Promise<ScheduledBreakRule> {
+    const windowScope = normalizeWindowScope(windowScopeInput);
+
+    if (!isValidBreakAfterMinutes(breakAfterMinutes)) {
+      throw new Error("Choose a supported break threshold.");
+    }
+
+    if (!isValidBreakDurationMinutes(breakDurationMinutes)) {
+      throw new Error("Choose a break duration from 1 minute to 1 hour.");
+    }
+
+    const settings = await this.get(now);
+
+    if (settings.scheduledBreakRules.some((rule) => rule.windowScope === windowScope)) {
+      throw new Error(
+        windowScope === "private"
+          ? "Private Windows already have a scheduled break."
+          : "Regular Windows already have a scheduled break."
+      );
+    }
+
+    const rule: ScheduledBreakRule = {
+      id: createScheduledBreakRuleId(
+        windowScope,
+        now,
+        new Set(settings.scheduledBreakRules.map((candidate) => candidate.id))
+      ),
+      enabled: true,
+      windowScope,
+      breakAfterMinutes,
+      breakDurationMinutes,
+      schedule: normalizeSchedule(scheduleInput).schedule,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await this.save({
+      ...settings,
+      scheduledBreakRules: [...settings.scheduledBreakRules, rule],
+      updatedAt: now
+    });
+
+    return rule;
+  }
+
+  async removeScheduledBreakRule(id: string, now = Date.now()): Promise<void> {
+    const settings = await this.get(now);
+    await this.save({
+      ...settings,
+      scheduledBreakRules: settings.scheduledBreakRules.filter((rule) => rule.id !== id),
+      updatedAt: now
+    });
+  }
+
+  async setScheduledBreakRuleEnabled(
+    id: string,
+    enabled: boolean,
+    now = Date.now()
+  ): Promise<void> {
+    const settings = await this.get(now);
+    await this.save({
+      ...settings,
+      scheduledBreakRules: settings.scheduledBreakRules.map((rule) =>
+        rule.id === id ? { ...rule, enabled, updatedAt: now } : rule
+      ),
+      updatedAt: now
+    });
+  }
+
+  async updateScheduledBreakRule(
+    id: string,
+    breakAfterMinutes: number,
+    scheduleInput: ScheduleConfig = ALWAYS_SCHEDULE,
+    now = Date.now(),
+    windowScopeInput?: WindowScope,
+    breakDurationMinutes?: number
+  ): Promise<void> {
+    if (!isValidBreakAfterMinutes(breakAfterMinutes)) {
+      throw new Error("Choose a supported break threshold.");
+    }
+
+    const settings = await this.get(now);
+    const existing = settings.scheduledBreakRules.find((rule) => rule.id === id);
+
+    if (!existing) {
+      throw new Error("Scheduled break not found.");
+    }
+
+    const nextBreakDurationMinutes = breakDurationMinutes ?? existing.breakDurationMinutes;
+
+    if (!isValidBreakDurationMinutes(nextBreakDurationMinutes)) {
+      throw new Error("Choose a break duration from 1 minute to 1 hour.");
+    }
+
+    const windowScope = normalizeWindowScope(windowScopeInput ?? existing.windowScope);
+
+    if (
+      settings.scheduledBreakRules.some(
+        (rule) => rule.id !== id && rule.windowScope === windowScope
+      )
+    ) {
+      throw new Error(
+        windowScope === "private"
+          ? "Private Windows already have a scheduled break."
+          : "Regular Windows already have a scheduled break."
+      );
+    }
+
+    await this.save({
+      ...settings,
+      scheduledBreakRules: settings.scheduledBreakRules.map((rule) =>
+        rule.id === id
+          ? {
+              ...rule,
+              windowScope,
+              breakAfterMinutes,
+              breakDurationMinutes: nextBreakDurationMinutes,
+              schedule: normalizeSchedule(scheduleInput).schedule,
+              updatedAt: now
+            }
+          : rule
+      ),
+      updatedAt: now
+    });
   }
 
   async addBlockedDomain(

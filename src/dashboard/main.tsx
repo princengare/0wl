@@ -20,6 +20,12 @@ import {
 } from "@/shared/historyModes";
 import { browser } from "@/shared/browser";
 import { APP_PRIVACY_POLICY_URL } from "@/shared/appSurface";
+import {
+  BREAK_THRESHOLD_DURATION_MINUTES,
+  PRIVATE_TIME_LIMIT_DURATION_MINUTES,
+  SCHEDULED_BREAK_DURATION_MINUTES,
+  TIME_LIMIT_DURATION_MINUTES
+} from "@/shared/durationOptions";
 import { getPrivateWindowAccessStatus, normalizeWindowScope } from "@/platform/windowScope";
 import { getBrowserTarget } from "@/platform/browserTarget";
 import { ExtensionFooter } from "@/shared/ExtensionFooter";
@@ -61,6 +67,13 @@ import type {
   HistoryRange,
   HistorySessionView,
   ScheduleConfig,
+  ScheduledBreakRule,
+  SyncDiagnostics,
+  SyncBundle,
+  SyncConflictResolution,
+  SyncExportResult,
+  SyncImportPreview,
+  SyncImportResult,
   TimeLimitedDomain,
   TodaySummary,
   HistoryModeSelection,
@@ -115,18 +128,27 @@ const deleteSpecificOptions: Array<{
   { label: "Reset Custom Site Categories", value: "custom-site-categories" }
 ];
 
-const regularTimeLimitMinutes = [
-  1, 5, 10, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300
-] as const;
-const privateTimeLimitMinutes = [0, ...regularTimeLimitMinutes] as const;
-const timeLimitOptions = regularTimeLimitMinutes.map((value) => ({
+const timeLimitOptions = TIME_LIMIT_DURATION_MINUTES.map((value) => ({
   label: formatDurationMinutes(value),
   value
 }));
-const privateTimeLimitOptions = privateTimeLimitMinutes.map((value) => ({
+const privateTimeLimitOptions = PRIVATE_TIME_LIMIT_DURATION_MINUTES.map((value) => ({
   label: formatDurationMinutes(value),
   value
 }));
+const scheduledBreakAfterOptions = BREAK_THRESHOLD_DURATION_MINUTES.map((value) => ({
+  label: formatDurationMinutes(value),
+  value
+}));
+const scheduledBreakDurationOptions = SCHEDULED_BREAK_DURATION_MINUTES.map((value) => ({
+  label: formatDurationMinutes(value),
+  value
+}));
+const syncConflictOptions: Array<{ label: string; value: SyncConflictResolution }> = [
+  { label: "Keep current conflicts", value: "keep-current" },
+  { label: "Use imported conflicts", value: "use-imported" },
+  { label: "Skip conflicts", value: "skip" }
+];
 
 const dayLabels = ["S", "M", "T", "W", "T", "F", "S"] as const;
 const visionDayLabels = [
@@ -227,6 +249,18 @@ function selectValueToRetention(value: string): HistoryRetentionDays {
 
 function downloadBackup(result: DataExportResult): void {
   const blob = new Blob([JSON.stringify(result.backup, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = result.fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadSyncBundle(result: SyncExportResult): void {
+  const blob = new Blob([JSON.stringify(result.bundle, null, 2)], {
     type: "application/json"
   });
   const url = URL.createObjectURL(blob);
@@ -410,6 +444,33 @@ function PrivateScopeToggle({
         <circle cx="11" cy="21" r="3.5" />
         <circle cx="21" cy="21" r="3.5" />
         <path d="M14.5 21h3" />
+      </svg>
+    </button>
+  );
+}
+
+function BreakModeToggle({
+  active,
+  onToggle
+}: {
+  active: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      className={`terminal-private-toggle ${active ? "active" : ""}`}
+      type="button"
+      aria-label={active ? "Leave scheduled break setup" : "Set scheduled browser break"}
+      aria-pressed={active}
+      title={active ? "Scheduled Breaks" : "Time Limits"}
+      onClick={onToggle}
+    >
+      <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false" role="img">
+        <path d="M9 11h12v7a6 6 0 0 1-6 6h0a6 6 0 0 1-6-6v-7Z" />
+        <path d="M21 13h2a3 3 0 0 1 0 6h-2" />
+        <path d="M8 26h15" />
+        <path d="M12 7v-3" />
+        <path d="M17 7v-3" />
       </svg>
     </button>
   );
@@ -1448,6 +1509,13 @@ function TimeLimitsPage({
   const [editingInput, setEditingInput] = useState("");
   const [editingLimitMinutes, setEditingLimitMinutes] = useState(30);
   const [editingSchedule, setEditingSchedule] = useState<ScheduleConfig>(ALWAYS_SCHEDULE);
+  const [breakMode, setBreakMode] = useState(false);
+  const [breakAfterMinutes, setBreakAfterMinutes] = useState(45);
+  const [breakDurationMinutes, setBreakDurationMinutes] = useState(5);
+  const [editingBreakId, setEditingBreakId] = useState<string | null>(null);
+  const [editingBreakAfterMinutes, setEditingBreakAfterMinutes] = useState(45);
+  const [editingBreakDurationMinutes, setEditingBreakDurationMinutes] = useState(5);
+  const [editingBreakSchedule, setEditingBreakSchedule] = useState<ScheduleConfig>(ALWAYS_SCHEDULE);
   const [error, setError] = useState<string | null>(null);
   const [windowScopeView, setWindowScopeView] = useState<WindowScope>("regular");
   const placeholder = useCyclingTypedPlaceholder(input, windowScopeView === "private");
@@ -1459,6 +1527,13 @@ function TimeLimitsPage({
         (limited) => normalizeWindowScope(limited.windowScope) === windowScopeView
       ),
     [settings?.timeLimitedDomains, windowScopeView]
+  );
+  const visibleScheduledBreaks = useMemo(
+    () =>
+      (settings?.scheduledBreakRules ?? []).filter(
+        (rule) => normalizeWindowScope(rule.windowScope) === windowScopeView
+      ),
+    [settings?.scheduledBreakRules, windowScopeView]
   );
 
   useEffect(() => {
@@ -1473,6 +1548,20 @@ function TimeLimitsPage({
 
   async function addLimit(): Promise<void> {
     try {
+      if (breakMode) {
+        const next = await sendMessage<ExtensionSettings>({
+          type: "ADD_SCHEDULED_BREAK_RULE",
+          breakAfterMinutes,
+          breakDurationMinutes,
+          schedule,
+          windowScope: windowScopeView
+        });
+        setSchedule(ALWAYS_SCHEDULE);
+        setError(null);
+        onSettingsChanged(next);
+        return;
+      }
+
       const next = await sendMessage<ExtensionSettings>({
         type: "ADD_TIME_LIMITED_DOMAIN",
         input,
@@ -1497,9 +1586,26 @@ function TimeLimitsPage({
     onSettingsChanged(next);
   }
 
+  async function removeScheduledBreak(id: string): Promise<void> {
+    const next = await sendMessage<ExtensionSettings>({
+      type: "REMOVE_SCHEDULED_BREAK_RULE",
+      id
+    });
+    onSettingsChanged(next);
+  }
+
   async function setEnabled(id: string, enabled: boolean): Promise<void> {
     const next = await sendMessage<ExtensionSettings>({
       type: "SET_TIME_LIMITED_DOMAIN_ENABLED",
+      id,
+      enabled
+    });
+    onSettingsChanged(next);
+  }
+
+  async function setScheduledBreakEnabled(id: string, enabled: boolean): Promise<void> {
+    const next = await sendMessage<ExtensionSettings>({
+      type: "SET_SCHEDULED_BREAK_RULE_ENABLED",
       id,
       enabled
     });
@@ -1536,6 +1642,19 @@ function TimeLimitsPage({
     setError(null);
   }
 
+  function startEditingBreak(rule: ScheduledBreakRule): void {
+    if (editingBreakId === rule.id) {
+      setEditingBreakId(null);
+      return;
+    }
+
+    setEditingBreakId(rule.id);
+    setEditingBreakAfterMinutes(rule.breakAfterMinutes);
+    setEditingBreakDurationMinutes(rule.breakDurationMinutes);
+    setEditingBreakSchedule(rule.schedule);
+    setError(null);
+  }
+
   async function saveEdit(id: string): Promise<void> {
     try {
       await updateLimit(id, editingLimitMinutes, editingSchedule, editingInput);
@@ -1546,39 +1665,97 @@ function TimeLimitsPage({
     }
   }
 
+  async function saveBreakEdit(id: string): Promise<void> {
+    try {
+      const next = await sendMessage<ExtensionSettings>({
+        type: "UPDATE_SCHEDULED_BREAK_RULE",
+        id,
+        breakAfterMinutes: editingBreakAfterMinutes,
+        breakDurationMinutes: editingBreakDurationMinutes,
+        schedule: editingBreakSchedule,
+        windowScope: windowScopeView
+      });
+      setEditingBreakId(null);
+      setError(null);
+      onSettingsChanged(next);
+    } catch (editError) {
+      setError(editError instanceof Error ? editError.message : "Unable to update break rule.");
+    }
+  }
+
   return (
     <section className="terminal-section">
       <div className="terminal-page-heading">
         <div>
           <h1 className="terminal-title">Time Limits</h1>
         </div>
-        <PrivateScopeToggle
-          activeScope={windowScopeView}
-          onToggle={() =>
-            setWindowScopeView((current) => (current === "regular" ? "private" : "regular"))
-          }
-        />
-      </div>
-      <div className="terminal-input-row terminal-input-row-three">
-        <input
-          aria-label="Website domain"
-          placeholder={placeholder}
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              void addLimit();
+        <div className="terminal-heading-actions">
+          <BreakModeToggle
+            active={breakMode}
+            onToggle={() => setBreakMode((current) => !current)}
+          />
+          <PrivateScopeToggle
+            activeScope={windowScopeView}
+            onToggle={() =>
+              setWindowScopeView((current) => (current === "regular" ? "private" : "regular"))
             }
-          }}
-        />
-        <TerminalSelect
-          ariaLabel="Daily time limit"
-          value={limitMinutes}
-          options={selectedTimeLimitOptions}
-          onChange={setLimitMinutes}
-        />
+          />
+        </div>
+      </div>
+      <div
+        className={`terminal-input-row ${breakMode ? "terminal-input-row-break" : "terminal-input-row-three"}`}
+      >
+        {breakMode ? (
+          <div className="terminal-break-copy-group">
+            <span
+              className="terminal-input-label terminal-input-label-plain"
+              aria-label="Scheduled break threshold"
+            >
+              Take a break after:
+            </span>
+            <TerminalSelect
+              ariaLabel="Break threshold"
+              value={breakAfterMinutes}
+              options={scheduledBreakAfterOptions}
+              onChange={setBreakAfterMinutes}
+            />
+            <span
+              className="terminal-input-label terminal-input-label-plain terminal-break-connector"
+              aria-label="Scheduled break duration"
+            >
+              , lasting for:
+            </span>
+          </div>
+        ) : (
+          <input
+            aria-label="Website domain"
+            placeholder={placeholder}
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void addLimit();
+              }
+            }}
+          />
+        )}
+        {breakMode ? (
+          <TerminalSelect
+            ariaLabel="Break duration"
+            value={breakDurationMinutes}
+            options={scheduledBreakDurationOptions}
+            onChange={setBreakDurationMinutes}
+          />
+        ) : (
+          <TerminalSelect
+            ariaLabel="Daily time limit"
+            value={limitMinutes}
+            options={selectedTimeLimitOptions}
+            onChange={setLimitMinutes}
+          />
+        )}
         <button className="terminal-button" type="button" onClick={() => void addLimit()}>
-          Limit
+          {breakMode ? "Set" : "Limit"}
         </button>
       </div>
       <ScheduleEditor schedule={schedule} onChange={setSchedule} />
@@ -1586,7 +1763,88 @@ function TimeLimitsPage({
       {error ? <p className="terminal-error">{error}</p> : null}
 
       <div className="terminal-list" style={{ marginTop: "2rem" }}>
-        {visibleTimeLimits.length ? (
+        {breakMode ? (
+          visibleScheduledBreaks.length ? (
+            visibleScheduledBreaks.map((rule) => (
+              <div className="terminal-rule" key={rule.id}>
+                <div className="terminal-list-row">
+                  <span className="terminal-rule-copy">
+                    <span>Browser Break</span>
+                    <span className="terminal-muted">
+                      after {formatDurationMinutes(rule.breakAfterMinutes)} browsing
+                    </span>
+                    <span className="terminal-muted">
+                      {formatDurationMinutes(rule.breakDurationMinutes)} break
+                    </span>
+                    <span className="terminal-muted">{formatScheduleSummary(rule.schedule)}</span>
+                  </span>
+                  <span className="terminal-actions">
+                    <label className="terminal-toggle">
+                      <TerminalCheckbox
+                        checked={rule.enabled}
+                        onChange={(checked) => void setScheduledBreakEnabled(rule.id, checked)}
+                      />
+                      {rule.enabled ? "Active" : "Paused"}
+                    </label>
+                    <button
+                      className="terminal-button"
+                      type="button"
+                      onClick={() => startEditingBreak(rule)}
+                    >
+                      {editingBreakId === rule.id ? "Close" : "Edit"}
+                    </button>
+                    <button
+                      className="terminal-button"
+                      type="button"
+                      onClick={() => void removeScheduledBreak(rule.id)}
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </div>
+                {editingBreakId === rule.id ? (
+                  <div className="terminal-edit-panel">
+                    <div className="terminal-input-row terminal-input-row-break">
+                      <div className="terminal-break-copy-group">
+                        <span className="terminal-input-label terminal-input-label-plain">
+                          Take a break after:
+                        </span>
+                        <TerminalSelect
+                          ariaLabel="Edit break threshold"
+                          value={editingBreakAfterMinutes}
+                          options={scheduledBreakAfterOptions}
+                          onChange={setEditingBreakAfterMinutes}
+                        />
+                        <span className="terminal-input-label terminal-input-label-plain terminal-break-connector">
+                          , lasting for:
+                        </span>
+                      </div>
+                      <TerminalSelect
+                        ariaLabel="Edit break duration"
+                        value={editingBreakDurationMinutes}
+                        options={scheduledBreakDurationOptions}
+                        onChange={setEditingBreakDurationMinutes}
+                      />
+                      <button
+                        className="terminal-button"
+                        type="button"
+                        onClick={() => void saveBreakEdit(rule.id)}
+                      >
+                        Save
+                      </button>
+                    </div>
+                    <ScheduleEditor
+                      schedule={editingBreakSchedule}
+                      onChange={setEditingBreakSchedule}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <p className="terminal-muted">No scheduled breaks</p>
+          )
+        ) : visibleTimeLimits.length ? (
           visibleTimeLimits.map((limited) => (
             <div className="terminal-rule" key={limited.id}>
               <div className="terminal-list-row">
@@ -2430,6 +2688,12 @@ function DataControlSection({
 }): React.JSX.Element {
   const [status, setStatus] = useState<DataControlStatus | null>(null);
   const [importMode, setImportMode] = useState<DataImportMode>("merge");
+  const [includePrivateSyncData, setIncludePrivateSyncData] = useState(false);
+  const [syncConflictResolution, setSyncConflictResolution] =
+    useState<SyncConflictResolution>("keep-current");
+  const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostics | null>(null);
+  const [syncPreview, setSyncPreview] = useState<SyncImportPreview | null>(null);
+  const [pendingSyncBundle, setPendingSyncBundle] = useState<SyncBundle | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<Exclude<DataDeleteTarget, "settings">>("browsing-history");
   const [error, setError] = useState<string | null>(null);
@@ -2437,6 +2701,7 @@ function DataControlSection({
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
   const [resetText, setResetText] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const syncFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshDataControl = useCallback(async (): Promise<void> => {
     const [nextStatus, nextSettings] = await Promise.all([
@@ -2480,6 +2745,25 @@ function DataControlSection({
     }, "Export prepared.");
   }
 
+  async function exportSyncBundle(): Promise<void> {
+    await runDataAction(async () => {
+      downloadSyncBundle(
+        await sendMessage<SyncExportResult>({
+          type: "EXPORT_LOCAL_SYNC_BUNDLE",
+          includePrivateData: includePrivateSyncData
+        })
+      );
+    }, "Sync bundle prepared.");
+  }
+
+  async function checkLocalSync(): Promise<void> {
+    await runDataAction(async () => {
+      setSyncDiagnostics(
+        await sendMessage<SyncDiagnostics>({ type: "GET_LOCAL_SYNC_DIAGNOSTICS" })
+      );
+    }, "Local sync checked.");
+  }
+
   async function importBackup(backup: DataBackup, mode: DataImportMode): Promise<void> {
     await runDataAction(
       async () => {
@@ -2495,6 +2779,63 @@ function DataControlSection({
 
   async function readBackupFile(file: File): Promise<DataBackup> {
     return JSON.parse(await file.text()) as DataBackup;
+  }
+
+  async function readSyncBundleFile(file: File): Promise<SyncBundle> {
+    return JSON.parse(await file.text()) as SyncBundle;
+  }
+
+  async function handleSyncFile(file: File): Promise<void> {
+    try {
+      const bundle = await readSyncBundleFile(file);
+      const preview = await sendMessage<SyncImportPreview>({
+        type: "PREVIEW_LOCAL_SYNC_IMPORT",
+        bundle
+      });
+      setPendingSyncBundle(bundle);
+      setSyncPreview(preview);
+      setNotice("Sync preview ready.");
+      setError(null);
+    } catch (syncError) {
+      setPendingSyncBundle(null);
+      setSyncPreview(null);
+      setError(syncError instanceof Error ? syncError.message : "Unable to preview sync bundle.");
+    }
+  }
+
+  async function applySyncImport(): Promise<void> {
+    if (!pendingSyncBundle) {
+      setError("Choose a sync bundle first.");
+      return;
+    }
+
+    await runDataAction(async () => {
+      const result = await sendMessage<SyncImportResult>({
+        type: "APPLY_LOCAL_SYNC_IMPORT",
+        bundle: pendingSyncBundle,
+        conflictResolution: syncConflictResolution
+      });
+      setSyncPreview(result);
+      setPendingSyncBundle(null);
+    }, "Local sync applied.");
+  }
+
+  function requestApplySyncImport(): void {
+    if (!pendingSyncBundle) {
+      setError("Choose a sync bundle first.");
+      return;
+    }
+
+    setResetText("");
+    setConfirmation({
+      title: "Apply Local Sync Merge",
+      message:
+        "This merges the previewed local sync bundle into this browser. Type confirm to continue.",
+      confirmLabel: "Apply Sync Merge",
+      confirmationText: "confirm",
+      inputLabel: "Type confirm to apply sync merge",
+      run: applySyncImport
+    });
   }
 
   async function handleImportFile(file: File): Promise<void> {
@@ -2718,6 +3059,163 @@ function DataControlSection({
               }
             }}
           />
+        </section>
+
+        <section className="terminal-subsection terminal-separated">
+          <h3>Local Device Sync</h3>
+          <p className="terminal-muted">
+            Export a local sync bundle from one browser, import it in another, preview conflicts,
+            then merge only after confirming.
+          </p>
+          <div className="terminal-actions">
+            <button
+              className="terminal-button terminal-action-invert"
+              type="button"
+              onClick={() => void exportSyncBundle()}
+            >
+              Export Sync Bundle
+            </button>
+            <button
+              className="terminal-button terminal-action-invert"
+              type="button"
+              onClick={() => syncFileInputRef.current?.click()}
+            >
+              Preview Import
+            </button>
+            <button
+              className="terminal-button terminal-action-invert"
+              type="button"
+              onClick={() => void checkLocalSync()}
+            >
+              Check Local Sync
+            </button>
+          </div>
+          <label className="terminal-list-row">
+            <span>Include private aggregate data</span>
+            <TerminalCheckbox
+              checked={includePrivateSyncData}
+              onChange={setIncludePrivateSyncData}
+            />
+          </label>
+          <div className="terminal-list-row">
+            <span>Conflict handling</span>
+            <TerminalSelect
+              ariaLabel="Sync conflict handling"
+              value={syncConflictResolution}
+              options={syncConflictOptions}
+              onChange={setSyncConflictResolution}
+              width="min(100%, 18rem)"
+            />
+          </div>
+          <input
+            ref={syncFileInputRef}
+            hidden
+            type="file"
+            accept="application/json"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.currentTarget.value = "";
+
+              if (file) {
+                void handleSyncFile(file);
+              }
+            }}
+          />
+          {syncPreview ? (
+            <div className="terminal-rule">
+              <div className="terminal-grid">
+                <span>Source browser</span>
+                <span>{syncPreview.sourceBrowser}</span>
+                <span>Source extension ID</span>
+                <span>{syncPreview.sourceExtensionId ?? "not provided"}</span>
+                <span>Exported</span>
+                <span>{formatRecordDate(syncPreview.exportedAt)}</span>
+                <span>Sessions to add</span>
+                <span>{syncPreview.sessionsToAdd}</span>
+                <span>Duplicate sessions skipped</span>
+                <span>{syncPreview.duplicateSessionsSkipped}</span>
+                <span>Blocked sites add/update</span>
+                <span>
+                  {syncPreview.blockedSitesToAdd}/{syncPreview.blockedSitesToUpdate}
+                </span>
+                <span>Time limits add/update</span>
+                <span>
+                  {syncPreview.timeLimitsToAdd}/{syncPreview.timeLimitsToUpdate}
+                </span>
+                <span>Break rules add/update</span>
+                <span>
+                  {syncPreview.scheduledBreaksToAdd}/{syncPreview.scheduledBreaksToUpdate}
+                </span>
+                <span>Friction rules add/update</span>
+                <span>
+                  {syncPreview.frictionRulesToAdd}/{syncPreview.frictionRulesToUpdate}
+                </span>
+                <span>Site categories add/update</span>
+                <span>
+                  {syncPreview.siteCategoriesToAdd}/{syncPreview.siteCategoriesToUpdate}
+                </span>
+                <span>Conflicts</span>
+                <span>{syncPreview.conflicts.length}</span>
+              </div>
+              {syncPreview.conflicts.length > 0 ? (
+                <details className="terminal-pathway-details">
+                  <summary>Review conflicts</summary>
+                  <div className="terminal-list">
+                    {syncPreview.conflicts.slice(0, 8).map((conflict) => (
+                      <div className="terminal-list-row" key={conflict.id}>
+                        <span>{conflict.label}</span>
+                        <span className="terminal-muted">{conflict.type}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+              <div className="terminal-actions">
+                <button
+                  className="terminal-button terminal-action-invert"
+                  type="button"
+                  disabled={!pendingSyncBundle}
+                  onClick={requestApplySyncImport}
+                >
+                  Apply Sync Merge
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {syncDiagnostics ? (
+            <div className="terminal-rule">
+              <div className="terminal-grid">
+                <span>Current browser</span>
+                <span>{syncDiagnostics.currentBrowser}</span>
+                <span>Extension ID</span>
+                <span>{syncDiagnostics.extensionId ?? "unavailable"}</span>
+                <span>Sync method</span>
+                <span>{syncDiagnostics.syncMethod}</span>
+                <span>Last export</span>
+                <span>{formatRecordDate(syncDiagnostics.lastExportAt)}</span>
+                <span>Last import</span>
+                <span>{formatRecordDate(syncDiagnostics.lastImportAt)}</span>
+                <span>Duplicate prevention</span>
+                <span>{syncDiagnostics.duplicatePrevention}</span>
+                <span>Conflict review</span>
+                <span>{syncDiagnostics.conflictReview}</span>
+                <span>Private default</span>
+                <span>{syncDiagnostics.privateDataDefaultExcluded ? "excluded" : "included"}</span>
+              </div>
+              <div className="terminal-list">
+                {syncDiagnostics.limitations.map((limitation) => (
+                  <div className="terminal-list-row" key={limitation}>
+                    <span className="terminal-muted">{limitation}</span>
+                    <span></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <p className="terminal-muted">
+            Browser storage is sandboxed per browser. 0wl sync is local export/import in v0.1.9;
+            automatic same-device sync would require a local Native Messaging companion.
+          </p>
         </section>
 
         <section className="terminal-subsection terminal-separated">

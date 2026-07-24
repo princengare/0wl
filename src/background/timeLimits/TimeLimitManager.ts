@@ -213,9 +213,8 @@ export class TimeLimitManager {
     }
 
     const liveMs =
-      splitDurationByLocalDate(liveSessionStartedAt, now).find(
-        (slice) => slice.dateKey === today
-      )?.durationMs ?? 0;
+      splitDurationByLocalDate(liveSessionStartedAt, now).find((slice) => slice.dateKey === today)
+        ?.durationMs ?? 0;
 
     return persistedMs + liveMs;
   }
@@ -340,7 +339,7 @@ export class TimeLimitManager {
         ? tabUrl
         : limited.domain
           ? `https://${limited.domain}/`
-        : "about:blank";
+          : "about:blank";
 
     await this.dependencies.trackingEngine?.stopTrackingForTab(tabId, "navigation");
     await browser.tabs.update(tabId, {

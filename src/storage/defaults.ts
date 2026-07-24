@@ -22,6 +22,7 @@ export function createDefaultSettings(now: number): ExtensionSettings {
     idleThresholdSeconds: DEFAULT_IDLE_THRESHOLD_SECONDS,
     blockedDomains: [],
     timeLimitedDomains: [],
+    scheduledBreakRules: [],
     ignoredDomains: [],
     showBlockedAttemptCount: true,
     historyRetentionDays: null,
